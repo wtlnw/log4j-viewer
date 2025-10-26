@@ -5,8 +5,6 @@ Bundle-SymbolicName: log4j.viewer.core.test
 Bundle-Version: 1.0.0.qualifier
 Require-Bundle: org.junit,
  junit-jupiter-api,
- log4j.viewer.core,
- org.apache.logging.log4j.api,
- org.apache.logging.log4j.core
+ log4j.viewer.core
 Automatic-Module-Name: log4j.viewer.core.test
 Bundle-RequiredExecutionEnvironment: JavaSE-21
