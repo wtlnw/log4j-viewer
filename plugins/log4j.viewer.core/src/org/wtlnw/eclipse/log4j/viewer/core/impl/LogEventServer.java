@@ -1,0 +1,270 @@
+package org.wtlnw.eclipse.log4j.viewer.core.impl;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.SocketAppender;
+import org.wtlnw.eclipse.log4j.viewer.core.api.LogEventSupplierFactory;
+import org.wtlnw.eclipse.log4j.viewer.core.api.LogEventSupplierFactory.LogEventSupplier;
+
+/**
+ * Instances of this class provide server facilities for receiving log4j messages
+ * sent by clients using {@link SocketAppender}s.
+ */
+public class LogEventServer {
+
+	/**
+	 * @see #getPort()
+	 */
+	private final int _port = 4445;
+
+	/**
+	 * @see #getTimeout()
+	 */
+	private final int _timeout = 1000;
+
+	/**
+	 * @see #getConsumer()
+	 */
+	private final Consumer<LogEvent> _consumer;
+
+	/**
+	 * @see #getSupplierFactories()
+	 */
+	private final List<LogEventSupplierFactory> _factories;
+
+	/**
+	 * The {@link ExecutorService} to be used for accepting incoming connections and
+	 * handling data in parallel.
+	 */
+	private volatile ExecutorService _executor;
+
+	/**
+	 * Create a {@link LogEventServer}.
+	 * 
+	 * @param consumer  see {@link #getConsumer()}
+	 * @param factories see {@link #getSupplierFactories()}
+	 */
+	public LogEventServer(final Consumer<LogEvent> consumer, final List<LogEventSupplierFactory> factories) {
+		_consumer = Objects.requireNonNull(consumer);
+		_factories = Objects.requireNonNull(factories);
+	}
+
+	/**
+	 * @return the port to listen to incoming connections on
+	 */
+	public int getPort() {
+		return _port;
+	}
+
+	/**
+	 * @return the timeout in milliseconds to block when waiting for incoming
+	 *         connections or data
+	 */
+	public int getTimeout() {
+		return _timeout;
+	}
+
+	/**
+	 * @return the {@link Consumer} to be called when {@link LogEvent} are read from
+	 *         incoming connections
+	 */
+	public Consumer<LogEvent> getConsumer() {
+		return _consumer;
+	}
+
+	/**
+	 * @return a (possibly empty) {@link List} of {@link LogEventSupplierFactory}s
+	 *         to be used for reading {@link LogEvent} from accepted connections.
+	 */
+	public List<LogEventSupplierFactory> getSupplierFactories() {
+		return _factories;
+	}
+
+	/**
+	 * Start listening for incoming connections and data.
+	 * 
+	 * @throws IllegalStateException if the receiver had already been started
+	 */
+	public synchronized void start() throws IllegalStateException {
+		if (_executor != null) {
+			throw new IllegalStateException();
+		}
+
+		_executor = Executors.newThreadPerTaskExecutor(Thread::new);
+
+		// start the acceptor thread
+		_executor.execute(() -> {
+			try (final ServerSocket server = new ServerSocket(getPort())) {
+				// make sure to set a timeout prior to entering the accept-loop
+				// because we cannot guarantee that blocking can be interrupted
+				// in order to shutdown the server itself
+				server.setSoTimeout(getTimeout());
+
+				accept(server, _executor);
+			} catch (final IOException e) {
+				// server socket is broken, terminate the server
+				stop();
+			}
+		});
+	}
+
+	/**
+	 * Accept incoming connections and handle these in a separate thread.
+	 * 
+	 * @param server   the {@link ServerSocket} to listen for incoming connection on
+	 * @param executor the {@link ExecutorService} to be used for creating new
+	 *                 threads for data reading
+	 * @throws IOException if an error occurred while using the given
+	 *                     {@link ServerSocket}
+	 */
+	private void accept(final ServerSocket server, final ExecutorService executor) throws IOException {
+		// make sure to exit the accept-loop when server stop is requested
+		while (!executor.isShutdown()) {
+			try {
+				final Socket client = server.accept();
+
+				// run event reading in a separate virtual thread
+				executor.execute(() -> handle(client, executor));
+			} catch (final SocketTimeoutException ex) {
+				// no connection attempts, continue listening
+			}
+		}
+	}
+
+	/**
+	 * Read {@link LogEvent}s from the given {@link Socket} and forward them to
+	 * {@link #getConsumer()}.
+	 * 
+	 * @param client   the {@link Socket} to read events from
+	 * @param executor the {@link ExecutorService} to check for shutdown requests
+	 */
+	private void handle(final Socket client, final ExecutorService executor) {
+		try (final InputStream stream = new BufferedInputStream(client.getInputStream())) {
+			// make sure to set a timeout prior to entering the read-loop
+			// because we cannot guarantee that blocking can be interrupted
+			// in order to shutdown the server itself
+			client.setSoTimeout(getTimeout());
+
+			// a supplier can be cached per stream because log4j
+			// allows only one layout per SocketAppender:
+			// so one connection -> one layout
+			final LogEventSupplier supplier = getSupplier(stream, executor);
+			read(supplier, executor);
+		} catch (final IOException ex) {
+			// client socket is broken, terminate thread
+		}
+	}
+
+	/**
+	 * @param stream   the {@link InputStream} to return the appropriate
+	 *                 {@link LogEventSupplier} for
+	 * @param executor the {@link ExecutorService} to check for shutdown requests
+	 * @return the {@link LogEventSupplier} which supports reading {@link LogEvent}s
+	 *         from the given {@link InputStream}
+	 * @throws IOException              if an error occurred while reading from the
+	 *                                  given {@link InputStream}
+	 * @throws IllegalArgumentException if the given {@link InputStream} does not
+	 *                                  support mark/reset API
+	 * @throws IllegalStateException    if an appropriate {@link LogEventSupplier}
+	 *                                  could not be determined
+	 */
+	private LogEventSupplier getSupplier(final InputStream stream, final ExecutorService executor)
+			throws IOException, IllegalArgumentException, IllegalStateException {
+		if (!stream.markSupported()) {
+			throw new IllegalArgumentException("Cannot determine event supplier for connections not supporting mark/reset.");
+		}
+
+		while (!executor.isShutdown()) {
+			try {
+				// wait until data arrives in order to determine which supplier to use
+				stream.mark(1);
+				if (stream.read() < 0) {
+					throw new IllegalStateException("Cannot determine event supplier for empty streams.");
+				}
+				stream.reset();
+
+				// now that we know that there is data in the stream, we can determine
+				// the supplier to be used for the given stream or fail if none was
+				// determined because.
+				for (final LogEventSupplierFactory factory : getSupplierFactories()) {
+					final LogEventSupplier supplier = factory.get(stream);
+					if (supplier != null) {
+						return supplier;
+					}
+				}
+
+				throw new IllegalStateException("Cannot determine event supplier for unknown event type.");
+			} catch (final SocketTimeoutException ex) {
+				// no incoming data, continue
+			}
+		}
+
+		// this may happen when no data was received at all and the server is going
+		// down.
+		throw new IllegalStateException("Cannot determine event supplier for missing data.");
+	}
+
+	/**
+	 * Read {@link LogEvent}s using the given {@link LogEventSupplier}.
+	 * 
+	 * @param supplier the {@link LogEventSupplier} to be used for reading
+	 * @param executor the {@link ExecutorService} to check for shutdown requests
+	 * @throws IOException if an error occurred while reading events
+	 */
+	private void read(final LogEventSupplier supplier, final ExecutorService executor) throws IOException {
+		// make sure the exit the event-loop when server stop is requested
+		while (!executor.isShutdown()) {
+			try {
+				getConsumer().accept(supplier.get());
+			} catch (final SocketTimeoutException ex) {
+				// no incoming data, continue
+			}
+		}
+	}
+
+	/**
+	 * Stop listening for incoming connection requests and reading data from
+	 * accepted connections.
+	 * 
+	 * <p>
+	 * Calling threads are blocked until all connections are terminated.
+	 * </p>
+	 */
+	public synchronized void stop() {
+		if (_executor == null) {
+			throw new IllegalStateException();
+		}
+
+		_executor.shutdown();
+		awaitTermination();
+		_executor = null;
+	}
+
+	/**
+	 * Block current thread until the {@link ExecutorService} has terminated all
+	 * currently running tasks.
+	 */
+	private void awaitTermination() {
+		while (true) {
+			try {
+				if (_executor.awaitTermination(_timeout, TimeUnit.MILLISECONDS)) {
+					break;
+				}
+			} catch (final InterruptedException ex) {
+				// ignore and continue waiting
+			}
+		}
+	}
+}

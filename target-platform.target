@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?pde version="3.8"?>
+<target name="platform">
+	<locations>
+		<location includeAllPlatforms="false" includeConfigurePhase="true" includeMode="planner" includeSource="true" type="InstallableUnit">
+			<repository location="https://download.eclipse.org/releases/2025-09"/>
+			<unit id="org.eclipse.sdk.feature.group" version="4.37.0.v20250905-1111"/>
+		</location>
+		<location includeDependencyDepth="none" includeSource="true" label="Log4j" missingManifest="generate" type="Maven">
+
+			<feature id="org.wtlnw.eclipse.log4j" label="Log4J API &amp; Core" version="2.25.2">
+
+   
+
+   
+
+   
+				<description url="http://www.example.com/description">
+      [Enter Feature Description here.]
+   </description>
+				<copyright url="http://www.example.com/copyright">
+      [Enter Copyright Description here.]
+   </copyright>
+				<license url="http://www.example.com/license">
+      [Enter License Description here.]
+   </license>
+			</feature>
+			<dependencies>
+				<dependency>
+					<groupId>org.apache.logging.log4j</groupId>
+					<artifactId>log4j-api</artifactId>
+					<version>2.25.2</version>
+					<type>jar</type>
+				</dependency>
+				<dependency>
+					<groupId>org.apache.logging.log4j</groupId>
+					<artifactId>log4j-core</artifactId>
+					<version>2.25.2</version>
+					<type>jar</type>
+				</dependency>
+			</dependencies>
+		</location>
+	</locations>
+</target>
