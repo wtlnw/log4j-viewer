@@ -46,7 +46,7 @@ public class TestLogEventServer {
 	void test() throws IOException {
 		final List<LogEvent> events = new ArrayList<>();
 		final List<LogEventSupplierFactory> factories = List.of(new SerializedLogEventSupplierFactory());
-		final LogEventServer server = new LogEventServer(events::add, factories);
+		final LogEventServer server = new LogEventServer(factories, events::add);
 
 		server.start();
 
@@ -71,7 +71,7 @@ public class TestLogEventServer {
 	void testAcceptTimeout() throws IOException, InterruptedException {
 		final List<LogEvent> events = new ArrayList<>();
 		final List<LogEventSupplierFactory> factories = List.of(new SerializedLogEventSupplierFactory());
-		final LogEventServer server = new LogEventServer(events::add, factories);
+		final LogEventServer server = new LogEventServer(factories, events::add);
 
 		// first, start the server
 		server.start();
@@ -97,7 +97,7 @@ public class TestLogEventServer {
 	void testAcceptReadTimeout() throws IOException, InterruptedException {
 		final List<LogEvent> events = new ArrayList<>();
 		final List<LogEventSupplierFactory> factories = List.of(new SerializedLogEventSupplierFactory());
-		final LogEventServer server = new LogEventServer(events::add, factories);
+		final LogEventServer server = new LogEventServer(factories, events::add);
 
 		// first, start the server
 		server.start();
@@ -125,7 +125,7 @@ public class TestLogEventServer {
 	void testNoSuppliers() throws IOException, InterruptedException {
 		final List<LogEvent> events = new ArrayList<>();
 		final List<LogEventSupplierFactory> factories = List.of();
-		final LogEventServer server = new LogEventServer(events::add, factories);
+		final LogEventServer server = new LogEventServer(factories, events::add);
 
 		// first, start the server
 		server.start();

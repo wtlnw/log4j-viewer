@@ -1,6 +1,7 @@
 package org.wtlnw.eclipse.log4j.viewer.core.impl;
 
 import java.io.BufferedInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ServerSocket;
@@ -8,9 +9,11 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import org.apache.logging.log4j.core.LogEvent;
@@ -45,6 +48,22 @@ public class LogEventServer {
 	private final List<LogEventSupplierFactory> _factories;
 
 	/**
+	 * A {@link List} of {@link Consumer}s to be called when the server's state changes.
+	 * 
+	 * @see #addServerListener(Consumer)
+	 * @see #removeServerListener(Consumer)
+	 */
+	private final CopyOnWriteArrayList<Consumer<Boolean>> _serverListeners = new CopyOnWriteArrayList<>();
+
+	/**
+	 * A {@link List} of {@link BiConsumer}s to be called when an error occurs.
+	 * 
+	 * @see #addErrorListener(BiConsumer)
+	 * @see #removeErrorListener(BiConsumer)
+	 */
+	private final CopyOnWriteArrayList<BiConsumer<String, Throwable>> _errorListeners = new CopyOnWriteArrayList<>();
+	
+	/**
 	 * The {@link ExecutorService} to be used for accepting incoming connections and
 	 * handling data in parallel.
 	 */
@@ -52,11 +71,10 @@ public class LogEventServer {
 
 	/**
 	 * Create a {@link LogEventServer}.
-	 * 
-	 * @param consumer  see {@link #getConsumer()}
 	 * @param factories see {@link #getSupplierFactories()}
+	 * @param consumer  see {@link #getConsumer()}
 	 */
-	public LogEventServer(final Consumer<LogEvent> consumer, final List<LogEventSupplierFactory> factories) {
+	public LogEventServer(final List<LogEventSupplierFactory> factories, final Consumer<LogEvent> consumer) {
 		_consumer = Objects.requireNonNull(consumer);
 		_factories = Objects.requireNonNull(factories);
 	}
@@ -93,6 +111,61 @@ public class LogEventServer {
 	}
 
 	/**
+	 * Register the given {@link Consumer} to be called when the receiver's state
+	 * changes.
+	 * 
+	 * <p>
+	 * Note: has no effect if an identical {@link Consumer} had already been
+	 * registered.
+	 * </p>
+	 * 
+	 * @param listener the {@link Consumer} to register
+	 */
+	public void addServerListener(final Consumer<Boolean> listener) {
+		_serverListeners.addIfAbsent(listener);
+	}
+
+	/**
+	 * Unregister the given {@link Consumer}.
+	 * 
+	 * <p>
+	 * Note: has no effect if the given consumer was not registered.
+	 * </p>
+	 * 
+	 * @param listener the {@link Consumer} to unregister
+	 */
+	public void removeServerListener(final Consumer<Boolean> listener) {
+		_serverListeners.remove(listener);
+	}
+
+	/**
+	 * Register the given {@link BiConsumer} to be called when a communication error occurs.
+	 * 
+	 * <p>
+	 * Note: has no effect if an identical {@link BiConsumer} had already been
+	 * registered.
+	 * </p>
+	 * 
+	 * @param listener the {@link BiConsumer} to register
+	 */
+	public void addErrorListener(final BiConsumer<String, Throwable> listener) {
+		_errorListeners.addIfAbsent(listener);
+	}
+	
+	/**
+	 * Unregister the given {@link BiConsumer}.
+	 * 
+	 * <p>
+	 * Note: has no effect if the given consumer was not registered.
+	 * </p>
+	 * 
+	 * @param listener the {@link BiConsumer} to unregister
+	 */
+	public void removeErrorListener(final BiConsumer<String, Throwable> listener) {
+		_errorListeners.remove(listener);
+	}
+	
+	/**
 	 * Start listening for incoming connections and data.
 	 * 
 	 * @throws IllegalStateException if the receiver had already been started
@@ -112,8 +185,15 @@ public class LogEventServer {
 				// in order to shutdown the server itself
 				server.setSoTimeout(getTimeout());
 
+				// notify all registered listeners of successful server start
+				_serverListeners.forEach(l -> l.accept(true));
+
+				// wait for incoming connection requests
 				accept(server, _executor);
 			} catch (final IOException e) {
+				// notify all registered listener of acceptor error
+				_errorListeners.forEach(l -> l.accept("Acceptor thread encountered an error, server is going down.", e));
+
 				// server socket is broken, terminate the server
 				stop();
 			}
@@ -162,8 +242,18 @@ public class LogEventServer {
 			// so one connection -> one layout
 			final LogEventSupplier supplier = getSupplier(stream, executor);
 			read(supplier, executor);
+		} catch (final EOFException ex) {
+			// stream closed, terminate thread
+			_errorListeners.forEach(l -> l.accept("Client connection terminated, handler thread is going down.", ex));
 		} catch (final IOException ex) {
-			// client socket is broken, terminate thread
+			// client socket is broken, notify error listeners and terminate thread
+			_errorListeners.forEach(l -> l.accept("Handler thread encountered an error, connection is going down.", ex));
+		} catch (final IllegalStateException ex) {
+			// unsupported event format, notify error listeners and terminate thread
+			_errorListeners.forEach(l -> l.accept("Unsupported event format, connection is going down.", ex));
+		} catch (final IllegalArgumentException ex) {
+			// stream without mark/reset support, notify error listeners and terminate thread
+			_errorListeners.forEach(l -> l.accept("Unsupported stream implementation, connection is going down.", ex));
 		}
 	}
 
@@ -241,8 +331,10 @@ public class LogEventServer {
 	 * <p>
 	 * Calling threads are blocked until all connections are terminated.
 	 * </p>
+	 * 
+	 * @throws IllegalStateException if the receiver was not started
 	 */
-	public synchronized void stop() {
+	public synchronized void stop() throws IllegalStateException {
 		if (_executor == null) {
 			throw new IllegalStateException();
 		}
@@ -250,6 +342,9 @@ public class LogEventServer {
 		_executor.shutdown();
 		awaitTermination();
 		_executor = null;
+
+		// notify all registered listeners of server termination
+		_serverListeners.forEach(l -> l.accept(false));
 	}
 
 	/**
@@ -266,5 +361,12 @@ public class LogEventServer {
 				// ignore and continue waiting
 			}
 		}
+	}
+
+	/**
+	 * @return {@code true} if the receiver is running, {@code false} otherwise
+	 */
+	public synchronized boolean isRunning() {
+		return _executor != null && !_executor.isShutdown();
 	}
 }

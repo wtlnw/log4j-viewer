@@ -1,0 +1,13 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Log4j Viewer UI
+Bundle-SymbolicName: log4j.viewer.ui;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Require-Bundle: org.eclipse.core.runtime,
+ org.eclipse.ui,
+ log4j.viewer.core
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Import-Package: jakarta.inject;version="[2.0.0,3.0.0)"
+Automatic-Module-Name: log4j.viewer.ui
+Bundle-ActivationPolicy: lazy
+Bundle-Activator: org.wtlnw.eclipse.log4j.viewer.ui.Activator

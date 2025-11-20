@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <extension
+         point="org.eclipse.ui.preferencePages">
+      <page
+            id="org.wtlnw.eclipse.log4j.viewer.ui.preferences.LogViewerPreferencePage"
+            name="Log4j Viewer"
+            class="org.wtlnw.eclipse.log4j.viewer.ui.preferences.LogViewerPreferencePage">
+      </page>
+   </extension>
+   <extension
+         point="org.eclipse.core.runtime.preferences">
+      <initializer
+            class="org.wtlnw.eclipse.log4j.viewer.ui.preferences.LogViewerPreferenceInitializer">
+      </initializer>
+   </extension>
+   <extension
+         point="org.eclipse.ui.views">
+      <category
+            name="WTLNW Tools"
+            id="org.wtlnw.eclipse">
+      </category>
+      <view
+            id="org.wtlnw.eclipse.log4j.viewer.ui.views.LogViewerPart"
+            name="Log4j Viewer"
+            icon="icons/sample.png"
+            class="org.wtlnw.eclipse.log4j.viewer.ui.views.LogViewerPart"
+            category="org.wtlnw.eclipse"
+            inject="true">
+      </view>
+   </extension>
+
+</plugin>

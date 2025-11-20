@@ -4,7 +4,9 @@ Bundle-Name: Log4j Viewer Core
 Bundle-SymbolicName: log4j.viewer.core;singleton:=true
 Bundle-Version: 1.0.0.qualifier
 Export-Package: org.wtlnw.eclipse.log4j.viewer.core.api,
- org.wtlnw.eclipse.log4j.viewer.core.impl;x-friends:="log4j.viewer.core.test"
+ org.wtlnw.eclipse.log4j.viewer.core.filter,
+ org.wtlnw.eclipse.log4j.viewer.core.impl,
+ org.wtlnw.eclipse.log4j.viewer.core.util
 Require-Bundle: org.eclipse.core.runtime;visibility:=reexport,
  org.apache.logging.log4j.api;bundle-version="2.25.2";visibility:=reexport,
  org.apache.logging.log4j.core;bundle-version="2.25.2";visibility:=reexport
