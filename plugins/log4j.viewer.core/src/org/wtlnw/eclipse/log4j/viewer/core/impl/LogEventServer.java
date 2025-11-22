@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -219,6 +220,9 @@ public class LogEventServer {
 				executor.execute(() -> handle(client, executor));
 			} catch (final SocketTimeoutException ex) {
 				// no connection attempts, continue listening
+			} catch (final RejectedExecutionException ex) {
+				// this may happen when a connection request arrives
+				// while the server is being shut down -> ignore it
 			}
 		}
 	}
