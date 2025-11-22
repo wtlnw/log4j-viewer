@@ -3,6 +3,9 @@ package org.wtlnw.eclipse.log4j.viewer.ui.views;
 import static org.eclipse.swt.events.SelectionListener.widgetSelectedAdapter;
 
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -61,6 +64,12 @@ public class LogViewerPart extends ViewPart {
 	 */
 	public static final String ID = "org.wtlnw.eclipse.log4j.viewer.ui.views.LogViewerPart";
 
+	/**
+	 * The {@link ReadWriteLock} to be used for synchronized access to internal data
+	 * structures.
+	 */
+	private final ReadWriteLock _lock = new ReentrantReadWriteLock();
+	
 	private IPreferenceStore _prefs;
 	private LogEventFilter _filter;
 	private ColorRegistry _colors; 
@@ -102,11 +111,17 @@ public class LogViewerPart extends ViewPart {
 		_tableData = new LogEventRingBuffer(bufferSize);
 		_buffer = new LogEventBuffer(128); // use hard-coded value
 		_server = new LogEventServer(new LogEventSupplierRegistry().getFactories(), e -> {
-			synchronized (_buffer) {
+			final Lock write = _lock.writeLock();
+
+			write.lock();
+			try {
 				if (_buffer.depleted()) {
+					// block this thread until we have updated the table (hence syncExec())
 					PlatformUI.getWorkbench().getDisplay().syncExec(() -> updateTable(false));
 				}
 				_buffer.put(e);
+			} finally {
+				write.unlock();
 			}
 		});
 		_server.addErrorListener((msg, ex) -> Platform.getLog(getClass()).error(msg, ex));
@@ -132,7 +147,10 @@ public class LogViewerPart extends ViewPart {
 
 		_viewer = new LogEventTable(parent, columns);
 		_viewer.getTable().addListener(SWT.SetData, e -> {
-			synchronized (_rawEvents) {
+			final Lock read = _lock.readLock();
+
+			read.lock();
+			try {
 				final Table table = _viewer.getTable();
 				final TableItem item = (TableItem) e.item;
 				final LogEvent event;
@@ -173,6 +191,8 @@ public class LogViewerPart extends ViewPart {
 					case FATAL -> _colors.get(LogViewerPreferenceConstants.COLOR_FATAL);
 					default -> null;
 				});
+			} finally {
+				read.unlock();
 			}
 		});
 		_viewer.getTable().addMouseListener(MouseListener.mouseDoubleClickAdapter(e -> {
@@ -338,10 +358,15 @@ public class LogViewerPart extends ViewPart {
 		_clear = new Action() {
 			@Override
 			public void run() {
-				synchronized (_rawEvents) {
+				final Lock write = _lock.writeLock();
+				
+				write.lock();
+				try {
 					_rawEvents.clear();
 					_tableData.clear();
 					_viewer.getTable().removeAll();
+				} finally {
+					write.unlock();
 				}
 			}
 		};
@@ -370,7 +395,10 @@ public class LogViewerPart extends ViewPart {
 	 * current filter.
 	 */
 	private void refreshTable() {
-		synchronized (_rawEvents) {
+		final Lock write = _lock.writeLock();
+
+		write.lock();
+		try {
 			// clear the events displayed in the table
 			_tableData.clear();
 			
@@ -385,6 +413,8 @@ public class LogViewerPart extends ViewPart {
 			// update the table with new table data
 			_viewer.getTable().setItemCount(_tableData.getSize());
 			_viewer.getTable().clearAll();
+		} finally {
+			write.unlock();
 		}
 	}
 
@@ -401,44 +431,42 @@ public class LogViewerPart extends ViewPart {
 	 *               {@code false} to perform a one-time update only
 	 */
 	private void updateTable(final boolean repeat) {
-		synchronized (_rawEvents) {
-			// updates are paused, just clear the buffer and proceed
-			if (_pause.isChecked()) {
-				_buffer.clear();
-				return;
-			}
-
-			// remember if there is at least one new event to be displayed
-			boolean needsUpdate = false;
-
-			_buffer.flip();
-			while (!_buffer.depleted()) {
-				final LogEvent event = _buffer.get();
-
-				// unconditionally store raw events
-				_rawEvents.put(event);
-
-				// update table data if refresh is not paused
-				if (_filter.test(event)) {
-					_tableData.put(event);
-					needsUpdate = true;
-				}
-			}
+		// updates are paused, just clear the buffer and proceed
+		if (_pause.isChecked()) {
 			_buffer.clear();
+			return;
+		}
 
-			// update the table
-			if (_viewer != null && !_viewer.isDisposed()) {
-				// only update the table if there is at least one new event
-				// to display, thus avoiding unnecessary flickering.
-				if (needsUpdate) {
-					_viewer.getTable().setItemCount(_tableData.getSize());
-					_viewer.getTable().clearAll();
-				}
-				
-				// repeat after configured amount of time
-				if (repeat) {
-					scheduleTableUpdate();
-				}
+		// remember if there is at least one new event to be displayed
+		boolean needsUpdate = false;
+
+		_buffer.flip();
+		while (!_buffer.depleted()) {
+			final LogEvent event = _buffer.get();
+
+			// unconditionally store raw events
+			_rawEvents.put(event);
+
+			// update table data if refresh is not paused
+			if (_filter.test(event)) {
+				_tableData.put(event);
+				needsUpdate = true;
+			}
+		}
+		_buffer.clear();
+
+		// update the table
+		if (_viewer != null && !_viewer.isDisposed()) {
+			// only update the table if there is at least one new event
+			// to display, thus avoiding unnecessary flickering.
+			if (needsUpdate) {
+				_viewer.getTable().setItemCount(_tableData.getSize());
+				_viewer.getTable().clearAll();
+			}
+
+			// repeat after configured amount of time
+			if (repeat) {
+				scheduleTableUpdate();
 			}
 		}
 	}
@@ -449,8 +477,13 @@ public class LogViewerPart extends ViewPart {
 	 */
 	private void scheduleTableUpdate() {
 		_viewer.getDisplay().timerExec(_refreshMillis, () -> {
-			synchronized (_buffer) {
+			final Lock write = _lock.writeLock();
+
+			write.lock();
+			try {
 				updateTable(true);
+			} finally {
+				write.unlock();
 			}
 		});
 	}
