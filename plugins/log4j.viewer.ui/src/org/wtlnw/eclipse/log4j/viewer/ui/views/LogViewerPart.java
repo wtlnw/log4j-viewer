@@ -47,9 +47,14 @@ import org.wtlnw.eclipse.log4j.viewer.ui.preferences.LogViewerPreferenceConstant
 import org.wtlnw.eclipse.log4j.viewer.ui.widgets.LogEventColumn;
 import org.wtlnw.eclipse.log4j.viewer.ui.widgets.LogEventTable;
 
+/**
+ * A {@link ViewPart} implementation displaying log4j event entries.
+ */
 public class LogViewerPart extends ViewPart {
 
-//	TODO: implement copy to clipboard of selected lines
+// TODO: implement copy to clipboard of selected lines
+// TODO: implement export to file
+// TODO: implement preserve selection
 	
 	/**
 	 * The ID of the view as specified by the extension.
@@ -108,7 +113,7 @@ public class LogViewerPart extends ViewPart {
 	}
 	
 	@Override
-	public void createPartControl(Composite parent) {
+	public void createPartControl(final Composite parent) {
 		// initialize the color registry
 		_colors = new ColorRegistry(parent.getDisplay());
 		_colors.put(LogViewerPreferenceConstants.COLOR_DEBUG, PreferenceConverter.getColor(_prefs, LogViewerPreferenceConstants.COLOR_DEBUG));
@@ -188,7 +193,7 @@ public class LogViewerPart extends ViewPart {
 		}));
 		
 //		getSite().setSelectionProvider(viewer);
-		makeActions();
+		createActions();
 		hookContextMenu();
 		contributeToActionBars();
 
@@ -266,26 +271,29 @@ public class LogViewerPart extends ViewPart {
 		fillLocalToolBar(bars.getToolBarManager());
 	}
 
-	private void fillLocalPullDown(IMenuManager manager) {
+	private void fillLocalPullDown(final IMenuManager manager) {
 //		manager.add(action1);
 //		manager.add(new Separator());
 //		manager.add(action2);
 	}
 
-	private void fillContextMenu(IMenuManager manager) {
+	private void fillContextMenu(final IMenuManager manager) {
 //		manager.add(action1);
 //		manager.add(action2);
 //		// Other plug-ins can contribute there actions here
 //		manager.add(new Separator(IWorkbenchActionConstants.MB_ADDITIONS));
 	}
 
-	private void fillLocalToolBar(IToolBarManager manager) {
+	private void fillLocalToolBar(final IToolBarManager manager) {
 		manager.add(_run);
 		manager.add(_pause);
 		manager.add(_clear);
 	}
 
-	private void makeActions() {
+	/**
+	 * Create and initialize all actions the receiver or any of its parts require.
+	 */
+	private void createActions() {
 		_run = new Action("Start Event Server", Action.AS_CHECK_BOX) {
 			@Override
 			public void run() {
@@ -342,6 +350,10 @@ public class LogViewerPart extends ViewPart {
 		_pause.setImageDescriptor(Activator.getInstance().getImageRegistry().getDescriptor(Activator.IMG_PAUSE));
 	}
 
+	/**
+	 * Clear the table and re-populate it with the current data respecting the
+	 * current filter.
+	 */
 	private void refreshTable() {
 		synchronized (_rawEvents) {
 			// clear the events displayed in the table
@@ -361,6 +373,18 @@ public class LogViewerPart extends ViewPart {
 		}
 	}
 
+	/**
+	 * Update the table by displaying the new event entries respecting the current
+	 * filter.
+	 * 
+	 * <p>
+	 * Note: has no effect if updating was paused or no new entries were found.
+	 * </p>
+	 * 
+	 * @param repeat {@code true} to automatically schedule the next call to this
+	 *               method after the configured amount of milliseconds or
+	 *               {@code false} to perform a one-time update only
+	 */
 	private void updateTable(final boolean repeat) {
 		synchronized (_rawEvents) {
 			// updates are paused, just clear the buffer and proceed
@@ -404,6 +428,10 @@ public class LogViewerPart extends ViewPart {
 		}
 	}
 
+	/**
+	 * Schedule a deferred call to {@link #updateTable(boolean)} in order
+	 * to display new entries after the configured amount of milliseconds.
+	 */
 	private void scheduleTableUpdate() {
 		_viewer.getDisplay().timerExec(_refreshMillis, () -> {
 			synchronized (_buffer) {
@@ -414,7 +442,7 @@ public class LogViewerPart extends ViewPart {
 	
 	@Override
 	public void setFocus() {
-		_viewer.setFocus();
+		// do not focus the viewer itself
 	}
 
 	@Override
