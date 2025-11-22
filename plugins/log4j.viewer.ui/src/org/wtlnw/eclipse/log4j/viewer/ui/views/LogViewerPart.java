@@ -421,6 +421,9 @@ public class LogViewerPart extends ViewPart {
 	public void dispose() {
 		// stop the server and pause event updates
 		if (_server.isRunning()) _server.stop(); 
+
+		// close all open dialogs
+		if (_dialogs != null) _dialogs.close();
 		
 		// lastly, do whatever the super-class does
 		super.dispose();
