@@ -135,9 +135,18 @@ public class LogViewerPart extends ViewPart {
 			synchronized (_rawEvents) {
 				final Table table = _viewer.getTable();
 				final TableItem item = (TableItem) e.item;
+				final LogEvent event;
 				
-				// inverse order
-				final LogEvent event = eventAt(table.indexOf(item));
+				// Workaround for https://github.com/eclipse-platform/eclipse.platform.swt/issues/139
+				// when an event is sent for an item which is not displayed.
+				// This happens when a table is cleared while having a selection.
+				try {
+					event = eventAt(table.indexOf(item));
+				} catch (final IndexOutOfBoundsException ex) {
+					// this shouldn't have happened
+					return;
+				}
+
 				final String[] text = new String[columns.length];
 				for (int i = 0; i < columns.length; i++) {
 					// now this might seem weird but multi-line text seems to
@@ -206,6 +215,12 @@ public class LogViewerPart extends ViewPart {
 		scheduleTableUpdate();
 	}
 
+	/**
+	 * @param tableIndex the index of the {@link TableItem} to resolve the
+	 *                   appropriate {@link LogEvent} for
+	 * @return the {@link LogEvent} to be displayed by the {@link TableItem} at the
+	 *         given index
+	 */
 	private LogEvent eventAt(final int tableIndex) {
 		final int dataIndex = _tableData.getSize() - 1 - tableIndex;
 		return _tableData.get(dataIndex);
