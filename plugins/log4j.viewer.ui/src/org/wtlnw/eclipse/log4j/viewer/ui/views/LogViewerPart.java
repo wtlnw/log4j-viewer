@@ -2,6 +2,7 @@ package org.wtlnw.eclipse.log4j.viewer.ui.views;
 
 import static org.eclipse.swt.events.SelectionListener.widgetSelectedAdapter;
 
+import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -16,7 +17,10 @@ import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.preference.PreferenceConverter;
 import org.eclipse.jface.resource.ColorRegistry;
 import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.jface.window.Window;
+import org.eclipse.jface.window.WindowManager;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.Table;
@@ -38,15 +42,14 @@ import org.wtlnw.eclipse.log4j.viewer.core.util.LogEventBuffer;
 import org.wtlnw.eclipse.log4j.viewer.core.util.LogEventRingBuffer;
 import org.wtlnw.eclipse.log4j.viewer.ui.Activator;
 import org.wtlnw.eclipse.log4j.viewer.ui.dialogs.LogEventColumnFilterPopup;
+import org.wtlnw.eclipse.log4j.viewer.ui.dialogs.LogEventDetailDialog;
 import org.wtlnw.eclipse.log4j.viewer.ui.preferences.LogViewerPreferenceConstants;
 import org.wtlnw.eclipse.log4j.viewer.ui.widgets.LogEventColumn;
 import org.wtlnw.eclipse.log4j.viewer.ui.widgets.LogEventTable;
 
 public class LogViewerPart extends ViewPart {
 
-//	TODO: implement event detail dialog with stack trace linking (if possible)
 //	TODO: implement copy to clipboard of selected lines
-//	TODO: make detail dialog and copy to clipboard only available in pause mode
 	
 	/**
 	 * The ID of the view as specified by the extension.
@@ -66,6 +69,8 @@ public class LogViewerPart extends ViewPart {
 	private Action _run;
 	private Action _pause;
 	private Action _clear;
+
+	private WindowManager _dialogs;
 
 	@Override
 	public void saveState(final IMemento memento) {
@@ -104,13 +109,18 @@ public class LogViewerPart extends ViewPart {
 	
 	@Override
 	public void createPartControl(Composite parent) {
+		// initialize the color registry
 		_colors = new ColorRegistry(parent.getDisplay());
 		_colors.put(LogViewerPreferenceConstants.COLOR_DEBUG, PreferenceConverter.getColor(_prefs, LogViewerPreferenceConstants.COLOR_DEBUG));
 		_colors.put(LogViewerPreferenceConstants.COLOR_INFO, PreferenceConverter.getColor(_prefs, LogViewerPreferenceConstants.COLOR_INFO));
 		_colors.put(LogViewerPreferenceConstants.COLOR_WARN, PreferenceConverter.getColor(_prefs, LogViewerPreferenceConstants.COLOR_WARN));
 		_colors.put(LogViewerPreferenceConstants.COLOR_ERROR, PreferenceConverter.getColor(_prefs, LogViewerPreferenceConstants.COLOR_ERROR));
 		_colors.put(LogViewerPreferenceConstants.COLOR_FATAL, PreferenceConverter.getColor(_prefs, LogViewerPreferenceConstants.COLOR_FATAL));
-		
+
+		// initialize the detail dialog window manager
+		_dialogs = new WindowManager();
+
+		// initialize the actual event table
 		final LogEventColumn[] columns = Stream.of(LogEventProperty.values())
 					.map(p -> new LogEventColumn(p, createColumnFilter(p)))
 					.toArray(LogEventColumn[]::new);
@@ -122,11 +132,21 @@ public class LogViewerPart extends ViewPart {
 				final TableItem item = (TableItem) e.item;
 				
 				// inverse order
-				final int index = _tableData.getSize() - 1 - table.indexOf(item);
-				final LogEvent event = _tableData.get(index);
+				final LogEvent event = eventAt(table.indexOf(item));
 				final String[] text = new String[columns.length];
 				for (int i = 0; i < columns.length; i++) {
-					text[i] = columns[i].getProperty().getValueProvider().apply(event);
+					// now this might seem weird but multi-line text seems to
+					// affect the item's height on GTK by default as of November 2025;
+					// we have to cut the text in a way that allows single-line
+					// display of TableItems and display the multi-line text
+					// as tool-tips.
+					final String value = columns[i].getProperty().getValueProvider().apply(event);
+					final List<String> lines = value.lines().toList();
+					if (lines.size() > 1) {
+						text[i] = lines.getFirst();
+					} else {
+						text[i] = value;
+					}
 				}
 				item.setText(text);
 
@@ -141,6 +161,31 @@ public class LogViewerPart extends ViewPart {
 				});
 			}
 		});
+		_viewer.getTable().addMouseListener(MouseListener.mouseDoubleClickAdapter(e -> {
+			final Table table = (Table) e.widget;
+			final int selectionIndex = table.getSelectionIndex();
+
+			// fast-path return on empty selection
+			if (selectionIndex < 0) {
+				return;
+			}
+			
+			// resolve the event to display the details for
+			final LogEvent event = eventAt(selectionIndex);
+
+			// lookup an already opened dialog and bring it to front
+			for (final Window window : _dialogs.getWindows()) {
+				if (window instanceof LogEventDetailDialog dialog && dialog.getEvent() == event) {
+					dialog.open();
+					return;
+				}
+			}
+
+			// create a new dialog and open it.
+			final LogEventDetailDialog dialog = new LogEventDetailDialog(table.getShell(), event);
+			_dialogs.add(dialog);
+			dialog.open();
+		}));
 		
 //		getSite().setSelectionProvider(viewer);
 		makeActions();
@@ -154,6 +199,11 @@ public class LogViewerPart extends ViewPart {
 
 		// start table update
 		scheduleTableUpdate();
+	}
+
+	private LogEvent eventAt(final int tableIndex) {
+		final int dataIndex = _tableData.getSize() - 1 - tableIndex;
+		return _tableData.get(dataIndex);
 	}
 	
 	private Function<ToolBar, ToolItem> createColumnFilter(final LogEventProperty property) {

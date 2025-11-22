@@ -4,7 +4,10 @@ Bundle-Name: Log4j Viewer UI
 Bundle-SymbolicName: log4j.viewer.ui;singleton:=true
 Bundle-Version: 1.0.0.qualifier
 Require-Bundle: org.eclipse.core.runtime,
+ org.eclipse.jface.text,
  org.eclipse.ui,
+ org.eclipse.ui.console,
+ org.eclipse.jdt.debug.ui,
  log4j.viewer.core
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Import-Package: jakarta.inject;version="[2.0.0,3.0.0)"
