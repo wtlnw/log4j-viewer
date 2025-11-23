@@ -57,7 +57,6 @@ public class LogViewerPart extends ViewPart {
 
 // TODO: implement copy to clipboard of selected lines
 // TODO: implement export to file
-// TODO: implement preserve selection
 	
 	/**
 	 * The ID of the view as specified by the extension.
@@ -242,8 +241,18 @@ public class LogViewerPart extends ViewPart {
 	 *         given index
 	 */
 	private LogEvent eventAt(final int tableIndex) {
-		final int dataIndex = _tableData.getSize() - 1 - tableIndex;
+		final int dataIndex = invert(tableIndex);
 		return _tableData.get(dataIndex);
+	}
+
+	/**
+	 * Invert the given index for accessing event buffer and table items.
+	 * 
+	 * @param index the index to invert
+	 * @return the inverted index
+	 */
+	private int invert(final int index) {
+		return _tableData.getSize() - 1 - index;
 	}
 	
 	private Function<ToolBar, ToolItem> createColumnFilter(final LogEventProperty property) {
@@ -399,6 +408,11 @@ public class LogViewerPart extends ViewPart {
 
 		write.lock();
 		try {
+			// try to preserve selection
+			final int oldTableIndex = _viewer.getTable().getSelectionIndex();
+			final LogEvent oldEvent = oldTableIndex < 0 ? null : eventAt(oldTableIndex);
+			int newDataIndex = -1;
+			
 			// clear the events displayed in the table
 			_tableData.clear();
 			
@@ -407,12 +421,24 @@ public class LogViewerPart extends ViewPart {
 				final LogEvent event = _rawEvents.get(i);
 				if (_filter.test(event)) {
 					_tableData.put(event);
+
+					// the previous selection is still visible -> restore it
+					if (event == oldEvent) {
+						newDataIndex = i;
+					}
 				}
 			}
 			
 			// update the table with new table data
 			_viewer.getTable().setItemCount(_tableData.getSize());
 			_viewer.getTable().clearAll();
+			
+			// restore previous selection (if possible)
+			if (newDataIndex < 0) {
+				_viewer.getTable().deselectAll();
+			} else {
+				_viewer.getTable().select(invert(newDataIndex));
+			}
 		} finally {
 			write.unlock();
 		}
@@ -437,8 +463,8 @@ public class LogViewerPart extends ViewPart {
 			return;
 		}
 
-		// remember if there is at least one new event to be displayed
-		boolean needsUpdate = false;
+		// keep track of new items to be displayed
+		int added = 0;
 
 		_buffer.flip();
 		while (!_buffer.depleted()) {
@@ -450,7 +476,7 @@ public class LogViewerPart extends ViewPart {
 			// update table data if refresh is not paused
 			if (_filter.test(event)) {
 				_tableData.put(event);
-				needsUpdate = true;
+				added++;
 			}
 		}
 		_buffer.clear();
@@ -459,9 +485,23 @@ public class LogViewerPart extends ViewPart {
 		if (_viewer != null && !_viewer.isDisposed()) {
 			// only update the table if there is at least one new event
 			// to display, thus avoiding unnecessary flickering.
-			if (needsUpdate) {
+			if (added > 0) {
+				// remember the current selection
+				final int oldTableIndex = _viewer.getTable().getSelectionIndex();
+
+				// update the table first
 				_viewer.getTable().setItemCount(_tableData.getSize());
 				_viewer.getTable().clearAll();
+
+				// try to preserve the selection (if possible)
+				if (oldTableIndex > -1) {
+					final int newTableIndex = oldTableIndex + added;
+					if (newTableIndex < _viewer.getTable().getItemCount()) {
+						_viewer.getTable().select(newTableIndex);
+					} else {
+						_viewer.getTable().deselectAll();
+					}
+				}
 			}
 
 			// repeat after configured amount of time
