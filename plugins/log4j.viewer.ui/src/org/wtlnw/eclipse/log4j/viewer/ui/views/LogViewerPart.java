@@ -2,6 +2,8 @@ package org.wtlnw.eclipse.log4j.viewer.ui.views;
 
 import static org.eclipse.swt.events.SelectionListener.widgetSelectedAdapter;
 
+import java.io.FileNotFoundException;
+import java.io.PrintWriter;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -10,12 +12,14 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.impl.ThrowableProxy;
 import org.eclipse.core.runtime.Platform;
+import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.action.Action;
-import org.eclipse.jface.action.IMenuListener;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.action.MenuManager;
+import org.eclipse.jface.dialogs.ErrorDialog;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.preference.PreferenceConverter;
 import org.eclipse.jface.resource.ColorRegistry;
@@ -23,8 +27,12 @@ import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.jface.window.Window;
 import org.eclipse.jface.window.WindowManager;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableItem;
@@ -32,6 +40,7 @@ import org.eclipse.swt.widgets.ToolBar;
 import org.eclipse.swt.widgets.ToolItem;
 import org.eclipse.ui.IActionBars;
 import org.eclipse.ui.IMemento;
+import org.eclipse.ui.ISharedImages;
 import org.eclipse.ui.IViewSite;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
@@ -54,9 +63,6 @@ import org.wtlnw.eclipse.log4j.viewer.ui.widgets.LogEventTable;
  * A {@link ViewPart} implementation displaying log4j event entries.
  */
 public class LogViewerPart extends ViewPart {
-
-// TODO: implement copy to clipboard of selected lines
-// TODO: implement export to file
 	
 	/**
 	 * The ID of the view as specified by the extension.
@@ -82,6 +88,9 @@ public class LogViewerPart extends ViewPart {
 	private Action _run;
 	private Action _pause;
 	private Action _clear;
+	private Action _copy;
+	private Action _details;
+	private Action _export;
 
 	private WindowManager _dialogs;
 
@@ -195,35 +204,15 @@ public class LogViewerPart extends ViewPart {
 			}
 		});
 		_viewer.getTable().addMouseListener(MouseListener.mouseDoubleClickAdapter(e -> {
-			final Table table = (Table) e.widget;
-			final int selectionIndex = table.getSelectionIndex();
-
-			// fast-path return on empty selection
-			if (selectionIndex < 0) {
-				return;
+			final LogEvent event = getSelectedEvent();
+			if (event != null) {
+				openDetailDialog(event);
 			}
-			
-			// resolve the event to display the details for
-			final LogEvent event = eventAt(selectionIndex);
-
-			// lookup an already opened dialog and bring it to front
-			for (final Window window : _dialogs.getWindows()) {
-				if (window instanceof LogEventDetailDialog dialog && dialog.getEvent() == event) {
-					dialog.open();
-					return;
-				}
-			}
-
-			// create a new dialog and open it.
-			final LogEventDetailDialog dialog = new LogEventDetailDialog(table.getShell(), event);
-			_dialogs.add(dialog);
-			dialog.open();
 		}));
 		
-//		getSite().setSelectionProvider(viewer);
 		createActions();
-		hookContextMenu();
-		contributeToActionBars();
+		fillContextMenu();
+		fillActionBars();
 
 		// start the server AFTER initialization is done
 		if (_prefs.getBoolean(LogViewerPreferenceConstants.AUTOSTART)) {
@@ -232,6 +221,48 @@ public class LogViewerPart extends ViewPart {
 
 		// start table update
 		scheduleTableUpdate();
+	}
+
+	/**
+	 * Open the {@link LogEventDetailDialog} displaying details for the given
+	 * {@link LogEvent}.
+	 * 
+	 * @param event the {@link LogEvent} to open the detail dialogs for
+	 */
+	private void openDetailDialog(final LogEvent event) {
+		// lookup an already opened dialog and bring it to front
+		for (final Window window : _dialogs.getWindows()) {
+			if (window instanceof LogEventDetailDialog dialog && dialog.getEvent() == event) {
+				dialog.open();
+				return;
+			}
+		}
+
+		// create a new dialog and open it.
+		final LogEventDetailDialog dialog = new LogEventDetailDialog(_viewer.getShell(), event);
+		_dialogs.add(dialog);
+		dialog.open();
+	}
+
+	/**
+	 * @return the {@link LogEvent} currently selected in the table viewer or
+	 *         {@code null} if none selected
+	 */
+	private LogEvent getSelectedEvent() {
+		final Lock read = _lock.readLock();
+		read.lock();
+		try {
+			final int tableIndex = _viewer.getTable().getSelectionIndex();
+			
+			// fast-path return on empty selection
+			if (tableIndex < 0) {
+				return null;
+			} else {
+				return eventAt(tableIndex);
+			}
+		} finally {
+			read.unlock();
+		}
 	}
 
 	/**
@@ -254,7 +285,15 @@ public class LogViewerPart extends ViewPart {
 	private int invert(final int index) {
 		return _tableData.getSize() - 1 - index;
 	}
-	
+
+	/**
+	 * Build a {@link Function} which creates a {@link ToolItem} providing filtering
+	 * functionality for the given {@link LogEventProperty}.
+	 * 
+	 * @param property the {@link LogEventProperty} to create a filter for
+	 * @return the {@link Function} that will create a {@link ToolItem} for a
+	 *         column's {@link ToolBar} opening a {@link LogEventColumnFilterPopup}
+	 */
 	private Function<ToolBar, ToolItem> createColumnFilter(final LogEventProperty property) {
 		return bar -> {
 			final ToolItem item = new ToolItem(bar, SWT.PUSH);
@@ -295,43 +334,37 @@ public class LogViewerPart extends ViewPart {
 			return item;
 		};
 	}
-	
-	private void hookContextMenu() {
-		MenuManager menuMgr = new MenuManager("#PopupMenu");
+
+	/**
+	 * Add a context menu to the viewer's table.
+	 */
+	private void fillContextMenu() {
+		final MenuManager menuMgr = new MenuManager("#PopupMenu");
 		menuMgr.setRemoveAllWhenShown(true);
-		menuMgr.addMenuListener(new IMenuListener() {
-			public void menuAboutToShow(IMenuManager manager) {
-				LogViewerPart.this.fillContextMenu(manager);
-			}
+		menuMgr.addMenuListener(mgr -> {
+			mgr.add(_copy);
+			mgr.add(_details);
 		});
-		Menu menu = menuMgr.createContextMenu(_viewer);
-		_viewer.setMenu(menu);
-//		getSite().registerContextMenu(menuMgr, viewer);
-	}
 
-	private void contributeToActionBars() {
-		IActionBars bars = getViewSite().getActionBars();
-		fillLocalPullDown(bars.getMenuManager());
-		fillLocalToolBar(bars.getToolBarManager());
+		final Menu menu = menuMgr.createContextMenu(_viewer.getTable());
+		_viewer.getTable().setMenu(menu);
 	}
+	
+	/**
+	 * Add actions to the view's actions bars.
+	 */
+	private void fillActionBars() {
+		final IActionBars bars = getViewSite().getActionBars();
 
-	private void fillLocalPullDown(final IMenuManager manager) {
-//		manager.add(action1);
-//		manager.add(new Separator());
-//		manager.add(action2);
-	}
+		// fill the pull-down menu (aka burger menu)
+		final IMenuManager menu = bars.getMenuManager();
+		menu.add(_export);
 
-	private void fillContextMenu(final IMenuManager manager) {
-//		manager.add(action1);
-//		manager.add(action2);
-//		// Other plug-ins can contribute there actions here
-//		manager.add(new Separator(IWorkbenchActionConstants.MB_ADDITIONS));
-	}
-
-	private void fillLocalToolBar(final IToolBarManager manager) {
-		manager.add(_run);
-		manager.add(_pause);
-		manager.add(_clear);
+		// fill the tool bar
+		final IToolBarManager toolbar = bars.getToolBarManager();
+		toolbar.add(_run);
+		toolbar.add(_pause);
+		toolbar.add(_clear);
 	}
 
 	/**
@@ -364,7 +397,7 @@ public class LogViewerPart extends ViewPart {
 			_run.setChecked(running);
 		});
 		
-		_clear = new Action() {
+		_clear = new Action("Clear Event Table") {
 			@Override
 			public void run() {
 				final Lock write = _lock.writeLock();
@@ -379,7 +412,6 @@ public class LogViewerPart extends ViewPart {
 				}
 			}
 		};
-		_clear.setText("Clear Event Table");
 		_clear.setImageDescriptor(Activator.getInstance().getImageRegistry().getDescriptor(Activator.IMG_CLEAR));
 		
 		_pause = new Action("Pause Event Table Refresh", Action.AS_CHECK_BOX) {
@@ -397,6 +429,65 @@ public class LogViewerPart extends ViewPart {
 			}
 		};
 		_pause.setImageDescriptor(Activator.getInstance().getImageRegistry().getDescriptor(Activator.IMG_PAUSE));
+		
+		_copy = new Action("Copy Selected Event", PlatformUI.getWorkbench().getSharedImages().getImageDescriptor(ISharedImages.IMG_TOOL_COPY)) {
+			@Override
+			public void run() {
+				final LogEvent event = getSelectedEvent();
+
+				if (event != null) {
+					final Clipboard board = new Clipboard(_viewer.getDisplay());
+					final Function<LogEvent, String> serializer = getEventSerializer();
+					
+					board.setContents(new Object[] { serializer.apply(event) }, new Transfer[] { TextTransfer.getInstance() });
+					board.dispose(); // dispose the instance immediately
+				}
+			}
+		};
+		_copy.setDisabledImageDescriptor(PlatformUI.getWorkbench().getSharedImages().getImageDescriptor(ISharedImages.IMG_TOOL_COPY_DISABLED));
+		_copy.setEnabled(false);
+		_viewer.getTable().addSelectionListener(widgetSelectedAdapter(e -> _copy.setEnabled(e.item != null)));
+
+		_details = new Action("Show Selected Event Details...", PlatformUI.getWorkbench().getSharedImages().getImageDescriptor(ISharedImages.IMG_TOOL_FORWARD)) {
+			@Override
+			public void run() {
+				final LogEvent event = getSelectedEvent();
+				if (event != null) {
+					openDetailDialog(event);
+				}
+			}
+		};
+		_details.setDisabledImageDescriptor(PlatformUI.getWorkbench().getSharedImages().getImageDescriptor(ISharedImages.IMG_TOOL_FORWARD_DISABLED));
+		_details.setEnabled(false);
+		_viewer.getTable().addSelectionListener(widgetSelectedAdapter(e -> _details.setEnabled(e.item != null)));
+
+		_export = new Action("Export Displayed Events to File...", PlatformUI.getWorkbench().getSharedImages().getImageDescriptor("IMG_ETOOL_EXPORT_WIZ")) {
+			@Override
+			public void run() {
+				// prompt user for export location
+				final FileDialog dialog = new FileDialog(_viewer.getShell(), SWT.SAVE);
+				dialog.setText(getText());
+				dialog.setOverwrite(true);
+				final String path = dialog.open();
+
+				if (path != null) {
+					try (final PrintWriter out = new PrintWriter(path)) {
+						final Lock read = _lock.readLock();
+						read.lock();
+						try {
+							final Function<LogEvent, String> serializer = getEventSerializer();
+							for (int i = _tableData.getSize() - 1; i >= 0; i--) {
+								out.println(serializer.apply(_tableData.get(i)));
+							}
+						} finally {
+							read.unlock();
+						}
+					} catch (final FileNotFoundException e) {
+						ErrorDialog.openError(_viewer.getShell(), getText(), null, Status.error("Failed to export displayed events to specified file.", e));
+					}
+				}
+			}
+		};
 	}
 
 	/**
@@ -526,6 +617,31 @@ public class LogViewerPart extends ViewPart {
 				write.unlock();
 			}
 		});
+	}
+
+	/**
+	 * @return the {@link Function} for serializing {@link LogEvent}s
+	 */
+	private Function<LogEvent, String> getEventSerializer() {
+		return e -> {
+			final StringBuilder out = new StringBuilder();
+			out.append(LogEventProperty.TIMESTAMP.getValueProvider().apply(e)).append("\t");
+			out.append(LogEventProperty.LEVEL.getValueProvider().apply(e)).append("\t");
+			out.append(LogEventProperty.CATEGORY.getValueProvider().apply(e)).append(" ");
+			out.append(LogEventProperty.MESSAGE.getValueProvider().apply(e));
+
+			@SuppressWarnings("deprecation")
+			final ThrowableProxy proxy = e.getThrownProxy();
+			if (proxy != null) {
+				out.append(System.lineSeparator());
+
+				@SuppressWarnings("deprecation")
+				final String stacktrace = proxy.getCauseStackTraceAsString("");
+				out.append(stacktrace);
+			}
+			
+			return out.toString();
+		};
 	}
 	
 	@Override
