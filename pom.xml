@@ -7,10 +7,11 @@
 
 	<groupId>org.wtlnw.eclipse</groupId>
 	<artifactId>parent</artifactId>
-	<version>1.0.0-SNAPSHOT</version>
+	<version>${revision}</version>
 	<packaging>pom</packaging>
 
 	<properties>
+		<revision>1.0.0-SNAPSHOT</revision>
 		<tycho.version>5.0.0</tycho.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
@@ -33,7 +34,6 @@
 				<version>${tycho.version}</version>
 				<extensions>true</extensions>
 			</plugin>
-
 			<plugin>
 				<groupId>org.eclipse.tycho</groupId>
 				<artifactId>tycho-packaging-plugin</artifactId>
@@ -55,7 +55,7 @@
 				<configuration>
 					<executionEnvironment>JavaSE-21</executionEnvironment>
 					<target>
-						<file>../target-platform.target</file>
+						<file>../../target-platform.target</file>
 					</target>
 				</configuration>
 			</plugin>
@@ -68,11 +68,38 @@
 					<includeAllDependencies>true</includeAllDependencies>
 				</configuration>
 			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>flatten-maven-plugin</artifactId>
+				<version>1.7.3</version>
+				<configuration>
+					<updatePomFile>true</updatePomFile>
+					<flattenMode>resolveCiFriendliesOnly</flattenMode>
+				</configuration>
+				<executions>
+					<execution>
+						<id>flatten</id>
+						<phase>process-resources</phase>
+						<goals>
+							<goal>flatten</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>flatten.clean</id>
+						<phase>clean</phase>
+						<goals>
+							<goal>clean</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 	</build>
 	<modules>
 		<module>plugins</module>
+		<!-- 
 		<module>features</module>
 		<module>sites</module>
+		-->
 	</modules>
 </project>
