@@ -5,6 +5,7 @@ Bundle-SymbolicName: log4j.viewer.core.xml.test
 Bundle-Version: 1.0.0.qualifier
 Require-Bundle: org.junit,
  junit-jupiter-api,
- log4j.viewer.core.xml
+ log4j.viewer.core.xml,
+ com.fasterxml.woodstox.woodstox-core;bundle-version="7.1.1"
 Automatic-Module-Name: log4j.viewer.core.xml.test
 Bundle-RequiredExecutionEnvironment: JavaSE-21
