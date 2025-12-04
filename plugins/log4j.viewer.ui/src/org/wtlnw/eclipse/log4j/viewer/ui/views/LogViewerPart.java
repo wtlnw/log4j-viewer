@@ -178,6 +178,11 @@ public class LogViewerPart extends ViewPart {
 				}
 			});
 
+			// ignore null-events resolved by the above workaround
+			if (event == null) {
+				return;
+			}
+
 			final String[] text = new String[columns.length];
 			for (int i = 0; i < columns.length; i++) {
 				// now this might seem weird but multi-line text seems to
