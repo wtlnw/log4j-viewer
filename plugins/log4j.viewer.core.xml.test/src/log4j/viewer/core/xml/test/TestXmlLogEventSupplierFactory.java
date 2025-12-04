@@ -86,8 +86,6 @@ public class TestXmlLogEventSupplierFactory {
 		final List<LogEventSupplierFactory> factories = List.of(new XmlLogEventSupplierFactory());
 		final List<Throwable> errors = new ArrayList<>();
 		final LogEventServer server = new LogEventServer(factories, events::add);
-
-		server.start();
 		server.addErrorListener((msg, ex) -> {
 			if (ex instanceof EOFException) {
 				// ignore EOF
@@ -97,11 +95,17 @@ public class TestXmlLogEventSupplierFactory {
 			sema.release();
 		});
 
+		server.start();
+
 		try (final LoggerContext context = Configurator.initialize(config)) {
 			final Logger logger = context.getLogger(TestXmlLogEventSupplierFactory.class.getSimpleName());
 			logger.info("Information message");
 			logger.warn("Warning message");
 			logger.error("Error message", new RuntimeException());
+		} catch (final Exception ex) {
+			// logger initialization failed: make sure to release the
+			// semaphore to allow the test to terminate
+			sema.release();
 		}
 
 		sema.acquire();
