@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.wtlnw.eclipse.log4j.viewer.core.events">
+      <supplier-factory
+            class="log4j.viewer.core.json.impl.JsonLogEventSupplierFactory">
+      </supplier-factory>
+   </extension>
+</plugin>
