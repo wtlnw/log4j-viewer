@@ -63,6 +63,8 @@ import org.wtlnw.eclipse.log4j.viewer.ui.widgets.LogEventTable;
  */
 public class LogViewerPart extends ViewPart {
 	
+//	TODO: think about the icon for the viewer (maybe something with wooden logs for fun)
+	
 	/**
 	 * The ID of the view as specified by the extension.
 	 */

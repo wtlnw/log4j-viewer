@@ -38,7 +38,9 @@ public class XmlLogEventSupplierFactory implements LogEventSupplierFactory {
 				return new XmlLogEventSupplier(stream, complete);
 			}
 		} catch (final Exception ex) {
-			// failed to read from the stream -> reset the stream
+			// failed to read from the stream
+		} finally {
+			// make sure to reset the stream upon successful return
 			stream.reset();
 		}
 
