@@ -248,16 +248,16 @@ public class LogEventServer {
 			read(supplier, executor);
 		} catch (final EOFException ex) {
 			// stream closed, terminate thread
-			_errorListeners.forEach(l -> l.accept("Client connection terminated, handler thread is going down.", ex));
+			_errorListeners.forEach(l -> l.accept(client.getInetAddress() + ": client connection terminated, handler thread is going down.", ex));
 		} catch (final IOException ex) {
 			// client socket is broken, notify error listeners and terminate thread
-			_errorListeners.forEach(l -> l.accept("Handler thread encountered an error, connection is going down.", ex));
+			_errorListeners.forEach(l -> l.accept(client.getInetAddress() + ": handler thread encountered an error, connection is going down.", ex));
 		} catch (final IllegalStateException ex) {
 			// unsupported event format, notify error listeners and terminate thread
-			_errorListeners.forEach(l -> l.accept("Unsupported event format, connection is going down.", ex));
+			_errorListeners.forEach(l -> l.accept(client.getInetAddress() + ": unsupported event format, connection is going down.", ex));
 		} catch (final IllegalArgumentException ex) {
 			// stream without mark/reset support, notify error listeners and terminate thread
-			_errorListeners.forEach(l -> l.accept("Unsupported stream implementation, connection is going down.", ex));
+			_errorListeners.forEach(l -> l.accept(client.getInetAddress() + ": unsupported stream implementation, connection is going down.", ex));
 		}
 	}
 
@@ -315,9 +315,10 @@ public class LogEventServer {
 	 * 
 	 * @param supplier the {@link LogEventSupplier} to be used for reading
 	 * @param executor the {@link ExecutorService} to check for shutdown requests
-	 * @throws IOException if an error occurred while reading events
+	 * @throws IOException  if an error occurred while reading events
+	 * @throws EOFException if end of stream was reached
 	 */
-	private void read(final LogEventSupplier supplier, final ExecutorService executor) throws IOException {
+	private void read(final LogEventSupplier supplier, final ExecutorService executor) throws IOException, EOFException {
 		// make sure the exit the event-loop when server stop is requested
 		while (!executor.isShutdown()) {
 			try {
