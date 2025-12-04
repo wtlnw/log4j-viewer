@@ -1,10 +1,13 @@
 package org.wtlnw.eclipse.log4j.viewer.core.impl;
 
 import java.io.ByteArrayInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Semaphore;
+import java.util.function.Consumer;
 
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
@@ -41,112 +44,114 @@ public class TestLogEventServer {
 			</Configuration>
 			""";
 
-	@SuppressWarnings("deprecation")
+	private static final Consumer<LogEventServer> NOOP = server -> {};
+	
+	private static final Consumer<LogEventServer> WAIT = server -> {
+		try {
+			Thread.sleep(server.getTimeout());
+		} catch (final InterruptedException e) {
+			// ignore interruption
+		}
+	}; 
+	
 	@Test
-	void test() throws IOException {
+	void test() throws IOException, InterruptedException {
+		runWithConfiguration(config(CONFIG), NOOP, NOOP);
+	}
+
+	@Test
+	void testAcceptTimeout() throws IOException, InterruptedException {
+		runWithConfiguration(config(CONFIG), WAIT, NOOP);
+	}
+	
+	@Test
+	void testReadTimeout() throws IOException, InterruptedException {
+		runWithConfiguration(config(CONFIG), NOOP, WAIT);
+	}
+	
+	@Test
+	void testNoSuppliers() throws IOException, InterruptedException {
+		final Semaphore sema = new Semaphore(0);
 		final List<LogEvent> events = new ArrayList<>();
-		final List<LogEventSupplierFactory> factories = List.of(new SerializedLogEventSupplierFactory());
+		final List<LogEventSupplierFactory> factories = List.of();
 		final LogEventServer server = new LogEventServer(factories, events::add);
+		server.addErrorListener((msg, ex) -> {
+			if (ex instanceof IllegalStateException) {
+				sema.release();
+			}
+		});
 
 		server.start();
-
+		
 		try (final LoggerContext context = Configurator.initialize(config(CONFIG))) {
 			final Logger logger = context.getLogger(TestLogEventServer.class.getSimpleName());
+			
+			// now send the log messages
 			logger.info("Information message");
 			logger.warn("Warning message");
 			logger.error("Error message", new RuntimeException());
+		} catch (final Exception ex) {
+			// logger initialization failed: make sure to release the
+			// semaphore to allow the test to terminate
+			sema.release();
 		}
 
+		sema.acquire();
+		server.stop();
+
+		Assertions.assertEquals(0, events.size());
+	}
+	
+	@SuppressWarnings("deprecation")
+	private void runWithConfiguration(final Configuration config, final Consumer<LogEventServer> postStartAction, final Consumer<LogEventServer> preLogAction) throws InterruptedException {
+		// use a semaphore to block until the handler thread fails
+		// which is a signal for us that either an error occurred or
+		// end of stream was reached.
+		final Semaphore sema = new Semaphore(0);
+		
+		final List<LogEvent> events = new ArrayList<>();
+		final List<LogEventSupplierFactory> factories = List.of(new SerializedLogEventSupplierFactory());
+		final List<Throwable> errors = new ArrayList<>();
+		final LogEventServer server = new LogEventServer(factories, events::add);
+		server.addErrorListener((msg, ex) -> {
+			if (ex instanceof EOFException) {
+				// ignore EOF
+			} else {
+				errors.add(ex);
+			}
+			sema.release();
+		});
+
+		server.start();
+		postStartAction.accept(server);
+
+		try (final LoggerContext context = Configurator.initialize(config)) {
+			final Logger logger = context.getLogger(TestLogEventServer.class.getSimpleName());
+			
+			preLogAction.accept(server);
+			
+			logger.info("Information message");
+			logger.warn("Warning message");
+			logger.error("Error message", new RuntimeException());
+		} catch (final Exception ex) {
+			// logger initialization failed: make sure to release the
+			// semaphore to allow the test to terminate
+			sema.release();
+		}
+
+		sema.acquire();
 		server.stop();
 		
+		if (!errors.isEmpty()) {
+			errors.getFirst().printStackTrace();
+			Assertions.fail();
+		}
 		Assertions.assertEquals(3, events.size());
 		Assertions.assertEquals("Information message", events.get(0).getMessage().getFormattedMessage());
 		Assertions.assertEquals("Warning message", events.get(1).getMessage().getFormattedMessage());
 		Assertions.assertEquals("Error message", events.get(2).getMessage().getFormattedMessage());
 		
 		Assertions.assertNotNull(events.get(2).getThrownProxy());
-	}
-
-	@Test
-	void testAcceptTimeout() throws IOException, InterruptedException {
-		final List<LogEvent> events = new ArrayList<>();
-		final List<LogEventSupplierFactory> factories = List.of(new SerializedLogEventSupplierFactory());
-		final LogEventServer server = new LogEventServer(factories, events::add);
-
-		// first, start the server
-		server.start();
-
-		// wait for at least twice the length of server's timeout
-		Thread.sleep(server.getTimeout());
-		
-		// now connect to the server
-		try (final LoggerContext context = Configurator.initialize(config(CONFIG))) {
-			final Logger logger = context.getLogger(TestLogEventServer.class.getSimpleName());
-			logger.info("Information message");
-			logger.warn("Warning message");
-			logger.error("Error message", new RuntimeException());
-		}
-
-		// terminate the server and expect all three events having been received
-		server.stop();
-
-		Assertions.assertEquals(3, events.size());
-	}
-	
-	@Test
-	void testAcceptReadTimeout() throws IOException, InterruptedException {
-		final List<LogEvent> events = new ArrayList<>();
-		final List<LogEventSupplierFactory> factories = List.of(new SerializedLogEventSupplierFactory());
-		final LogEventServer server = new LogEventServer(factories, events::add);
-
-		// first, start the server
-		server.start();
-		
-		// connect to the server
-		try (final LoggerContext context = Configurator.initialize(config(CONFIG))) {
-			final Logger logger = context.getLogger(TestLogEventServer.class.getSimpleName());
-
-			// wait for at least twice the length of server's timeout
-			Thread.sleep(server.getTimeout());
-			
-			// now send the log messages
-			logger.info("Information message");
-			logger.warn("Warning message");
-			logger.error("Error message", new RuntimeException());
-		}
-
-		// terminate the server and expect all three events having been received
-		server.stop();
-
-		Assertions.assertEquals(3, events.size());
-	}
-	
-	@Test
-	void testNoSuppliers() throws IOException, InterruptedException {
-		final List<LogEvent> events = new ArrayList<>();
-		final List<LogEventSupplierFactory> factories = List.of();
-		final LogEventServer server = new LogEventServer(factories, events::add);
-
-		// first, start the server
-		server.start();
-		
-		// connect to the server
-		try (final LoggerContext context = Configurator.initialize(config(CONFIG))) {
-			final Logger logger = context.getLogger(TestLogEventServer.class.getSimpleName());
-
-			// wait for at least twice the length of server's timeout
-			Thread.sleep(server.getTimeout());
-			
-			// now send the log messages
-			logger.info("Information message");
-			logger.warn("Warning message");
-			logger.error("Error message", new RuntimeException());
-		}
-
-		// terminate the server and expect no events having been received
-		server.stop();
-
-		Assertions.assertEquals(0, events.size());
 	}
 	
 	private Configuration config(final String config) throws IOException {
