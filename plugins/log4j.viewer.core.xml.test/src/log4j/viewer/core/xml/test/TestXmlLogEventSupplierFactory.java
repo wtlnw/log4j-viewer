@@ -23,7 +23,7 @@ import org.wtlnw.eclipse.log4j.viewer.core.impl.LogEventServer;
 import log4j.viewer.core.xml.impl.XmlLogEventSupplierFactory;
 
 /**
- * Tests for {@link TestXmlLogEventSupplierFactory}.
+ * Tests for {@link XmlLogEventSupplierFactory}.
  */
 public class TestXmlLogEventSupplierFactory {
 
