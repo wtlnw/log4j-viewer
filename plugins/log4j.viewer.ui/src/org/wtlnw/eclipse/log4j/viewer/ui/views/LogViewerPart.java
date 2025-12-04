@@ -2,6 +2,7 @@ package org.wtlnw.eclipse.log4j.viewer.ui.views;
 
 import static org.eclipse.swt.events.SelectionListener.widgetSelectedAdapter;
 
+import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.stream.Stream;
 
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.impl.ThrowableProxy;
+import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.action.Action;
@@ -62,8 +64,6 @@ import org.wtlnw.eclipse.log4j.viewer.ui.widgets.LogEventTable;
  * A {@link ViewPart} implementation displaying log4j event entries.
  */
 public class LogViewerPart extends ViewPart {
-	
-//	TODO: think about the icon for the viewer (maybe something with wooden logs for fun)
 	
 	/**
 	 * The ID of the view as specified by the extension.
@@ -128,7 +128,21 @@ public class LogViewerPart extends ViewPart {
 				_buffer.put(e);
 			});
 		});
-		_server.addErrorListener((msg, ex) -> Platform.getLog(getClass()).error(msg, ex));
+		_server.addErrorListener((msg, ex) -> {
+			final ILog log = Platform.getLog(getClass());
+
+			switch (ex) {
+			case EOFException eof:
+				log.info(msg);
+				break;
+			case IllegalStateException ise:
+				log.info(msg);
+				break;
+			default:
+				log.error(msg, ex);
+				break;
+			}
+		});
 	}
 	
 	@Override
