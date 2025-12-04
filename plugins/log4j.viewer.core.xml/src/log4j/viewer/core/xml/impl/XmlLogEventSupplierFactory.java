@@ -5,13 +5,17 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
+import java.net.SocketTimeoutException;
 import java.util.Vector;
+
+import javax.xml.stream.XMLStreamException;
 
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.impl.Log4jLogEvent;
 import org.apache.logging.log4j.core.jackson.Log4jXmlObjectMapper;
 import org.wtlnw.eclipse.log4j.viewer.core.api.LogEventSupplierFactory;
 
+import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MappingIterator;
 
@@ -93,7 +97,17 @@ public class XmlLogEventSupplierFactory implements LogEventSupplierFactory {
 					return _reader.next();
 				}
 			} catch (final RuntimeException ex) {
-				// make sure to wrap RuntimeExceptions in an IOException
+				// highly sophisticated code to detect the SocketTimeoutException
+				// because it is not being propagated as is, we don't want that.
+				if (ex.getCause() instanceof JsonParseException jpe) {
+					if (jpe.getCause() instanceof XMLStreamException xse) {
+						if (xse.getNestedException() instanceof SocketTimeoutException ste) {
+							throw ste;
+						}
+					}
+				}
+
+				// make sure to wrap other RuntimeExceptions in an IOException
 				// to terminate the handler thread correctly
 				throw new IOException(ex);
 			}
