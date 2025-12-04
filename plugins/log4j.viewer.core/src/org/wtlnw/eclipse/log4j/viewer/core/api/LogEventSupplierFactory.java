@@ -1,5 +1,6 @@
 package org.wtlnw.eclipse.log4j.viewer.core.api;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -37,9 +38,10 @@ public interface LogEventSupplierFactory {
 		/**
 		 * @return the next {@link LogEvent} read from the associated
 		 *         {@link InputStream}
-		 * @throws IOException if an error occurred while reading from the associated
-		 *                     {@link InputStream}
+		 * @throws IOException  if an error occurred while reading from the associated
+		 *                      {@link InputStream}
+		 * @throws EOFException to indicate end of stream
 		 */
-		LogEvent get() throws IOException;
+		LogEvent get() throws IOException, EOFException;
 	}
 }
