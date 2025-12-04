@@ -4,8 +4,8 @@ Bundle-Name: Log4j Viewer Core XML Layout Support
 Bundle-SymbolicName: log4j.viewer.core.xml;singleton:=true
 Bundle-Version: 1.0.0.qualifier
 Require-Bundle: log4j.viewer.core;visibility:=reexport,
- com.fasterxml.jackson.core.jackson-core;bundle-version="2.19.1",
  com.fasterxml.jackson.core.jackson-annotations;bundle-version="2.19.1",
+ com.fasterxml.jackson.core.jackson-core;bundle-version="2.19.1",
  com.fasterxml.jackson.core.jackson-databind;bundle-version="2.19.1",
  stax2-api;bundle-version="4.2.2",
  com.fasterxml.woodstox.woodstox-core;bundle-version="7.1.1",
