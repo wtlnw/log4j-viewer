@@ -32,6 +32,13 @@ public interface LogEventSupplierFactory {
 	/**
 	 * Implementing classes are responsible for reading {@link LogEvent}s from an
 	 * {@link InputStream}.
+	 * 
+	 * <p>
+	 * Note: Implementing classes are advised to throw the underlying
+	 * {@link IOException}s if they cannot be handled or render the stream unusable.
+	 * These will then be handled by closing the stream and terminating the reader
+	 * thread.
+	 * </p>
 	 */
 	public interface LogEventSupplier {
 		
