@@ -119,7 +119,10 @@ public class LogViewerPart extends ViewPart {
 		_rawEvents = new LogEventRingBuffer(bufferSize);
 		_tableData = new LogEventRingBuffer(bufferSize);
 		_buffer = new LogEventBuffer(128); // use hard-coded value
-		_server = new LogEventServer(new LogEventSupplierRegistry().getFactories(), e -> {
+
+		final int port = _prefs.getInt(LogViewerPreferenceConstants.PORT);
+		final int timeout = _prefs.getInt(LogViewerPreferenceConstants.TIMEOUT);
+		_server = new LogEventServer(port, timeout, new LogEventSupplierRegistry().getFactories(), e -> {
 			Util.exclusive(_lock.writeLock(), () -> {
 				if (_buffer.depleted()) {
 					// block this thread until we have updated the table (hence syncExec())

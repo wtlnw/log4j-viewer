@@ -31,12 +31,12 @@ public class LogEventServer {
 	/**
 	 * @see #getPort()
 	 */
-	private final int _port = 4445;
+	private final int _port;
 
 	/**
 	 * @see #getTimeout()
 	 */
-	private final int _timeout = 1000;
+	private final int _timeout;
 
 	/**
 	 * @see #getConsumer()
@@ -71,11 +71,39 @@ public class LogEventServer {
 	private volatile ExecutorService _executor;
 
 	/**
-	 * Create a {@link LogEventServer}.
+	 * Create a {@link LogEventServer} with the default port (4445) and timeout
+	 * (500ms).
+	 * 
 	 * @param factories see {@link #getSupplierFactories()}
 	 * @param consumer  see {@link #getConsumer()}
+	 * @throws NullPointerException if the given {@link List} of factories or the
+	 *                              consumer are invalid
 	 */
-	public LogEventServer(final List<LogEventSupplierFactory> factories, final Consumer<LogEvent> consumer) {
+	public LogEventServer(final List<LogEventSupplierFactory> factories, final Consumer<LogEvent> consumer) throws NullPointerException {
+		this(4445, 500, factories, consumer);
+	}
+	
+	/**
+	 * Create a {@link LogEventServer}.
+	 * 
+	 * @param port      see {@link #getPort()}
+	 * @param timeout   see {@link #getTimeout()}
+	 * @param factories see {@link #getSupplierFactories()}
+	 * @param consumer  see {@link #getConsumer()}
+	 * @throws IllegalArgumentException if the given port or timeout are invalid
+	 * @throws NullPointerException     if the given {@link List} of factories or
+	 *                                  the consumer are invalid
+	 */
+	public LogEventServer(final int port, final int timeout, final List<LogEventSupplierFactory> factories, final Consumer<LogEvent> consumer) throws IllegalArgumentException, NullPointerException {
+		if (port < 0 || port > 65535) {
+			throw new IllegalArgumentException("Invalid port number: " + port);
+		}
+		if (timeout < 0) {
+			throw new IllegalArgumentException("Invalid timeout [ms]: " + timeout);
+		}
+
+		_port = port;
+		_timeout = timeout;
 		_consumer = Objects.requireNonNull(consumer);
 		_factories = Objects.requireNonNull(factories);
 	}
