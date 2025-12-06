@@ -97,9 +97,7 @@
 	</build>
 	<modules>
 		<module>plugins</module>
-		<!-- 
 		<module>features</module>
 		<module>sites</module>
-		-->
 	</modules>
 </project>

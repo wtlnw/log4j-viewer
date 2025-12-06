@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<site>
+   <feature id="log4j.viewer.feature">
+      <category name="org.wtlnw.eclipse.update"/>
+   </feature>
+   <bundle id="log4j.viewer.core.json">
+      <category name="org.wtlnw.eclipse.update"/>
+   </bundle>
+   <bundle id="log4j.viewer.core.xml">
+      <category name="org.wtlnw.eclipse.update"/>
+   </bundle>
+   <category-def name="org.wtlnw.eclipse.update" label="Eclipse Plugins Update Site"/>
+</site>
