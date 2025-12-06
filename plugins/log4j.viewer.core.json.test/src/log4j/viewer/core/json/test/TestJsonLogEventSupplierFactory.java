@@ -27,7 +27,26 @@ import log4j.viewer.core.json.impl.JsonLogEventSupplierFactory;
  */
 public class TestJsonLogEventSupplierFactory {
 
-	private static final String CONFIG_JSON = """
+	private static final String CONFIG_COMPLETE = """
+			<Configuration xmlns="https://logging.apache.org/xml/ns"
+			               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+			               xsi:schemaLocation="
+			                   https://logging.apache.org/xml/ns
+			                   https://logging.apache.org/xml/ns/log4j-config-2.xsd">
+			  <Appenders>
+			    <Socket name="SOCKET_APPENDER" host="localhost" port="4445">
+			      <JsonLayout complete="true"/>
+			    </Socket>
+			  </Appenders>
+			  <Loggers>
+			    <Root level="INFO">
+			      <AppenderRef ref="SOCKET_APPENDER"/>
+			    </Root>
+			  </Loggers>
+			</Configuration>
+			""";
+
+	private static final String CONFIG_FRAGMENTS = """
 			<Configuration xmlns="https://logging.apache.org/xml/ns"
 			               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 			               xsi:schemaLocation="
@@ -47,8 +66,13 @@ public class TestJsonLogEventSupplierFactory {
 			""";
 
 	@Test
-	void testJsonLayout() throws IOException, InterruptedException {
-		runWithConfiguration(config(CONFIG_JSON));
+	void testComplete() throws IOException, InterruptedException {
+		runWithConfiguration(config(CONFIG_COMPLETE));
+	}
+
+	@Test
+	void testFragments() throws IOException, InterruptedException {
+		runWithConfiguration(config(CONFIG_FRAGMENTS));
 	}
 	
 	@SuppressWarnings("deprecation")
@@ -88,8 +112,7 @@ public class TestJsonLogEventSupplierFactory {
 		server.stop();
 		
 		if (!errors.isEmpty()) {
-			errors.getFirst().printStackTrace();
-			Assertions.fail();
+			Assertions.fail(errors.getFirst());
 		}
 		Assertions.assertEquals(3, events.size());
 		Assertions.assertEquals("Information message", events.get(0).getMessage().getFormattedMessage());
