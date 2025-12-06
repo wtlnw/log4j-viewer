@@ -244,7 +244,7 @@ public class LogEventServer {
 			try {
 				final Socket client = server.accept();
 
-				// run event reading in a separate virtual thread
+				// run event reading in a separate thread
 				executor.execute(() -> handle(client, executor));
 			} catch (final SocketTimeoutException ex) {
 				// no connection attempts, continue listening
