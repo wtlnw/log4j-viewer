@@ -10,6 +10,8 @@
 	<version>${revision}</version>
 	<packaging>pom</packaging>
 
+	<name>Log4j Viewer Reactor</name>
+
 	<properties>
 		<revision>1.0.0-SNAPSHOT</revision>
 		<tycho.version>5.0.0</tycho.version>
