@@ -4,7 +4,7 @@
    <extension
          point="org.wtlnw.eclipse.log4j.viewer.core.events">
       <supplier-factory
-            class="log4j.viewer.core.xml.impl.XmlLogEventSupplierFactory">
+            class="org.wtlnw.eclipse.log4j.viewer.core.xml.impl.XmlLogEventSupplierFactory">
       </supplier-factory>
    </extension>
 

@@ -12,4 +12,4 @@ Require-Bundle: log4j.viewer.core;visibility:=reexport,
  com.fasterxml.jackson.dataformat.jackson-dataformat-xml;bundle-version="2.19.1"
 Automatic-Module-Name: log4j.viewer.core.xml
 Bundle-RequiredExecutionEnvironment: JavaSE-21
-Export-Package: log4j.viewer.core.xml.impl
+Export-Package: org.wtlnw.eclipse.log4j.viewer.core.xml.impl

@@ -1,4 +1,18 @@
-package log4j.viewer.core.json.test;
+/********************************************************************************
+ * Copyright (c) 2025 wtlnw and contributors
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0, or the Apache Software License 2.0
+ * which is available at https://www.apache.org/licenses/LICENSE-2.0.
+ *
+ * SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+ ********************************************************************************/
+
+package org.wtlnw.eclipse.log4j.viewer.core.xml.test;
 
 import java.io.ByteArrayInputStream;
 import java.io.EOFException;
@@ -19,13 +33,12 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.wtlnw.eclipse.log4j.viewer.core.api.LogEventSupplierFactory;
 import org.wtlnw.eclipse.log4j.viewer.core.impl.LogEventServer;
-
-import log4j.viewer.core.json.impl.JsonLogEventSupplierFactory;
+import org.wtlnw.eclipse.log4j.viewer.core.xml.impl.XmlLogEventSupplierFactory;
 
 /**
- * Tests for {@link JsonLogEventSupplierFactory}.
+ * Tests for {@link XmlLogEventSupplierFactory}.
  */
-public class TestJsonLogEventSupplierFactory {
+public class TestXmlLogEventSupplierFactory {
 
 	private static final String CONFIG_COMPLETE = """
 			<Configuration xmlns="https://logging.apache.org/xml/ns"
@@ -35,7 +48,7 @@ public class TestJsonLogEventSupplierFactory {
 			                   https://logging.apache.org/xml/ns/log4j-config-2.xsd">
 			  <Appenders>
 			    <Socket name="SOCKET_APPENDER" host="localhost" port="4445">
-			      <JsonLayout complete="true"/>
+			      <XmlLayout complete="true"/>
 			    </Socket>
 			  </Appenders>
 			  <Loggers>
@@ -54,7 +67,7 @@ public class TestJsonLogEventSupplierFactory {
 			                   https://logging.apache.org/xml/ns/log4j-config-2.xsd">
 			  <Appenders>
 			    <Socket name="SOCKET_APPENDER" host="localhost" port="4445">
-			      <JsonLayout/>
+			      <XmlLayout complete="false"/>
 			    </Socket>
 			  </Appenders>
 			  <Loggers>
@@ -83,7 +96,7 @@ public class TestJsonLogEventSupplierFactory {
 		final Semaphore sema = new Semaphore(0);
 		
 		final List<LogEvent> events = new ArrayList<>();
-		final List<LogEventSupplierFactory> factories = List.of(new JsonLogEventSupplierFactory());
+		final List<LogEventSupplierFactory> factories = List.of(new XmlLogEventSupplierFactory());
 		final List<Throwable> errors = new ArrayList<>();
 		final LogEventServer server = new LogEventServer(factories, events::add);
 		server.addErrorListener((msg, ex) -> {
@@ -98,7 +111,7 @@ public class TestJsonLogEventSupplierFactory {
 		server.start();
 
 		try (final LoggerContext context = Configurator.initialize(config)) {
-			final Logger logger = context.getLogger(TestJsonLogEventSupplierFactory.class.getSimpleName());
+			final Logger logger = context.getLogger(TestXmlLogEventSupplierFactory.class.getSimpleName());
 			logger.info("Information message");
 			logger.warn("Warning message");
 			logger.error("Error message", new RuntimeException());
