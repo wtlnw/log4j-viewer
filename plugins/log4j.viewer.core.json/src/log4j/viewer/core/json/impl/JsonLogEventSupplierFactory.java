@@ -3,6 +3,7 @@ package log4j.viewer.core.json.impl;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketTimeoutException;
 
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.impl.Log4jLogEvent;
@@ -27,8 +28,9 @@ public class JsonLogEventSupplierFactory implements LogEventSupplierFactory {
 		try {
 			final byte[] bytes = stream.readNBytes(4);
 			final String string = new String(bytes).trim();
-			
-			if (string.startsWith("{")) {
+			final boolean complete = string.startsWith("[");
+			final boolean fragment = string.startsWith("{");
+			if (complete || fragment) {
 				// make sure to reset the stream prior to supplier initialization
 				stream.reset();
 
@@ -45,7 +47,13 @@ public class JsonLogEventSupplierFactory implements LogEventSupplierFactory {
 							return reader.next();
 						}
 					} catch (final RuntimeException ex) {
-						// make sure to wrap RuntimeExceptions in an IOException
+						// highly sophisticated code to detect the SocketTimeoutException
+						// because it is not being propagated as is, we don't want that.
+						if (ex.getCause() instanceof SocketTimeoutException ste) {
+							throw ste;
+						}
+
+						// make sure to wrap other RuntimeExceptions in an IOException
 						// to terminate the handler thread correctly
 						throw new IOException(ex);
 					}
@@ -56,12 +64,10 @@ public class JsonLogEventSupplierFactory implements LogEventSupplierFactory {
 			}
 		} catch (final Exception ex) {
 			// failed to read from the stream
-		} finally {
-			// make sure to reset the stream upon successful return
-			stream.reset();
 		}
 
 		// either we do not support the stream or we failed reading from it
+		stream.reset();
 		return null;
 	}
 }
