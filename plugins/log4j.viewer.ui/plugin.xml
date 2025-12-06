@@ -25,7 +25,7 @@
       <view
             id="org.wtlnw.eclipse.log4j.viewer.ui.views.LogViewerPart"
             name="Log4j Viewer"
-            icon="icons/sample.png"
+            icon="icons/logviewer.svg"
             class="org.wtlnw.eclipse.log4j.viewer.ui.views.LogViewerPart"
             category="org.wtlnw.eclipse"
             inject="true">

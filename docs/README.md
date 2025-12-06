@@ -9,7 +9,23 @@ The current implementation supports the following layouts:
 
 Although the log4j team encourages developers to switch to the more generic and extensible [JsonLayoutTemplate](https://logging.apache.org/log4j/2.x/manual/layouts.html#JSONTemplateLayout) mechanism, there are still quite some problems to solve in order to be able to actually read its output.
 
-Incoming log events are displayed in a special table view providing an overview over the most important event fields as well as means to view event details (including exception stacktraces). Additionally, the table view can be filtered by columns and export its contents to a file.
+![](logviewer.png)
+
+Incoming log events are displayed in a special table view providing an overview over the most important event fields, starting/stopping the event capturing, pausing table updates and clearing its contents.
+
+![](logviewer_filter.png)
+
+It can be filtered by columns and export its contents to a file. Each column filter can then be customized just like find/replace eclipse menu (including regular expressions etc.).
+
+![](logviewer_context_menu.png)
+
+The table's context menu (or a double-click on selected item) provides means to view event details (including exception stacktraces).
+
+![](logviewer_details.png)
+
+If parts of the stacktrace are loaded as resources in your IDE, you will be able to navigate straight to the appropriate lines by simply clicking on the links in the stacktrace.
+
+![](logviewer_preferences.png)
 
 The view itself is limited to a fixed number of log events (configurable via preference page) so your IDE does not use up all available memory for log intensive applications. It also takes advantage of virtual tables which improves performance and further reduces memory usage.
 
