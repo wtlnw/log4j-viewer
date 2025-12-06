@@ -112,8 +112,7 @@ public class TestXmlLogEventSupplierFactory {
 		server.stop();
 		
 		if (!errors.isEmpty()) {
-			errors.getFirst().printStackTrace();
-			Assertions.fail();
+			Assertions.fail(errors.getFirst());
 		}
 		Assertions.assertEquals(3, events.size());
 		Assertions.assertEquals("Information message", events.get(0).getMessage().getFormattedMessage());
