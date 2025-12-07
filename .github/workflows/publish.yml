@@ -27,7 +27,7 @@ jobs:
 
       - name: Install xmllint
         run: sudo apt-get update && sudo apt-get install -y libxml2-utils
-		
+
       - name: Extract stamped version
         run: |
           unzip -p sites/log4j.viewer.updatesite/target/repository/content.jar content.xml > content.xml
