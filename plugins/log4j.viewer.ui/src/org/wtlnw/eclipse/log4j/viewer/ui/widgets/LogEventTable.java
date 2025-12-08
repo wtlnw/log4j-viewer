@@ -20,8 +20,9 @@ import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.events.ControlListener;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.MouseEvent;
+import org.eclipse.swt.events.MouseListener;
+import org.eclipse.swt.events.MouseMoveListener;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
@@ -183,6 +184,40 @@ public class LogEventTable extends Composite {
 		
 		final Sash columnSash = new Sash(header, SWT.VERTICAL | SWT.SMOOTH);
 		columnSash.setLayoutData(new RowData(SASH_WIDTH, table.getHeaderHeight()));
+		columnSash.addMouseListener(new MouseListener() {
+
+			/**
+			 * The {@link MouseMoveListener} to be attached to the {@link Sash}
+			 * when drag starts (upon mouse down event). It will be unregistered
+			 * upon drag end (mouse up event).
+			 */
+			private final MouseMoveListener _move = e -> {
+				final RowData data = (RowData) columnHeader.getLayoutData();
+
+				// only update the size upon actual changes to avoid flickering
+				if (e.x != 0) {
+					data.width += e.x;
+
+					// update the header size to adapt to the new column width
+					header.setSize(header.computeSize(SWT.DEFAULT, minSize.y));
+				}
+			};
+			
+			@Override
+			public void mouseDoubleClick(final MouseEvent e) {
+				// ignore
+			}
+
+			@Override
+			public void mouseDown(final MouseEvent e) {
+				((Sash) e.widget).addMouseMoveListener(_move);
+			}
+
+			@Override
+			public void mouseUp(final MouseEvent e) {
+				((Sash) e.widget).removeMouseMoveListener(_move);
+			}
+		});
 		columnSash.addPaintListener(e -> {
 			final GC gc = e.gc;
 			final Color backup = gc.getForeground();
@@ -194,43 +229,6 @@ public class LogEventTable extends Composite {
 				gc.drawLine(x, 0, x, y);
 			} finally {
 				gc.setForeground(backup);
-			}
-		});
-		columnSash.addSelectionListener(new SelectionAdapter() {
-			
-			private int _position = SWT.DEFAULT;
-
-			@Override
-			public void widgetSelected(final SelectionEvent e) {
-				// initialize the position to the current value indicating
-				// start of the dragging process
-				if (SWT.DEFAULT == _position) {
-					_position = e.x;
-					return;
-				}
-				
-				final int diff = e.x - _position;
-				final RowData data = (RowData) columnHeader.getLayoutData();
-				final int newWidth = data.width + diff;
-
-				if (diff == 0) {
-					// no changes -> do nothing
-				} else if (newWidth < minSize.x) {
-					// do not allow to make the column smaller than the minimum size
-					e.doit = false;
-				} else {
-					// update the sash's current position and column header's width
-					_position = e.x;
-					data.width = newWidth;
-
-					// update the header size to adapt to the new column width
-					header.setSize(header.computeSize(SWT.DEFAULT, minSize.y));
-				}
-
-				// make sure to reset the position when dragging ended
-				if ((e.stateMask & SWT.BUTTON_MASK) != 0) {
-					_position = SWT.DEFAULT;
-				}
 			}
 		});
 	}
