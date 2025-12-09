@@ -145,10 +145,6 @@ public class LogEventTable extends Composite {
 	private void createColumn(final LogEventColumn column, final Composite header, final Table table) {
 		checkWidget();
 		
-		if (table.getColumnCount() > 0) {
-			createColumnSash(header, table);
-		}
-		
 		final Composite columnHeader = createColumnHeader(column, header, table);
 		columnHeader.setLayoutData(new RowData(columnHeader.computeSize(SWT.DEFAULT, SWT.DEFAULT)));
 		
@@ -175,6 +171,8 @@ public class LogEventTable extends Composite {
 
 			columnItem.setWidth(width);
 		}));
+
+		createColumnSash(header, table);
 	}
 
 	private void createColumnSash(final Composite header, final Table table) {
