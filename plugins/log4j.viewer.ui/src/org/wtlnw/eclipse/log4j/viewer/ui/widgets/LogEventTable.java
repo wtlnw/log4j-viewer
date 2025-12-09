@@ -157,13 +157,10 @@ public class LogEventTable extends Composite {
 				width += HEADER_SPACING;
 
 				final int first = 0;
-				final int last = table.getColumnCount() - 1;
 				final int index = table.indexOf(columnItem);
 
 				if (index == first) {
 					width += SASH_WIDTH / 2 + 1;
-				} else if (index == last) {
-					width += SASH_WIDTH / 2;
 				} else {
 					width += HEADER_SPACING + SASH_WIDTH;
 				}
