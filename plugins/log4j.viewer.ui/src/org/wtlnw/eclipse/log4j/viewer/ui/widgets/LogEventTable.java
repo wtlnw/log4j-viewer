@@ -16,7 +16,6 @@ package org.wtlnw.eclipse.log4j.viewer.ui.widgets;
 
 import java.util.function.Function;
 
-import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.events.ControlListener;
@@ -222,7 +221,7 @@ public class LogEventTable extends Composite {
 			final GC gc = e.gc;
 			final Color backup = gc.getForeground();
 			try {
-				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_WIDGET_HIGHLIGHT_SHADOW));
+				gc.setForeground(gc.getDevice().getSystemColor(SWT.COLOR_WIDGET_BORDER));
 				final Rectangle bounds = columnSash.getBounds();
 				final int x = bounds.width / 2;
 				final int y = bounds.height;
@@ -246,7 +245,6 @@ public class LogEventTable extends Composite {
 		columnHead.setLayout(columnLayout);
 
 		final Label label = new Label(columnHead, SWT.NONE);
-		label.setFont(JFaceResources.getBannerFont());
 		label.setText(column.getProperty().getName());
 		label.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
