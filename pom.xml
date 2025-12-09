@@ -13,7 +13,7 @@
 	<name>Log4j Viewer Reactor</name>
 
 	<properties>
-		<revision>1.0.1-SNAPSHOT</revision>
+		<revision>1.0.1</revision>
 		<tycho.version>5.0.0</tycho.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
