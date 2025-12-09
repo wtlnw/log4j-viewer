@@ -39,6 +39,8 @@ import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.console.ConsolePlugin;
+import org.eclipse.ui.console.IPatternMatchListener;
 import org.osgi.framework.FrameworkUtil;
 import org.wtlnw.eclipse.log4j.viewer.core.filter.LogEventProperty;
 import org.wtlnw.eclipse.log4j.viewer.ui.util.Util;
@@ -179,17 +181,35 @@ public class LogEventDetailDialog extends TrayDialog {
 
 		@SuppressWarnings("deprecation")
 		final ThrowableProxy thrown = _event.getThrownProxy();
-		final JavaStackTraceConsole console = new JavaStackTraceConsole();
 		@SuppressWarnings("deprecation")
-		final String stacktrace = thrown.getCauseStackTraceAsString("");
+		final String stacktrace = thrown.getExtendedStackTraceAsString();
+
+		// create a new console and initialize pattern match listeners for it
+		final JavaStackTraceConsole console = new JavaStackTraceConsole();
+		final IPatternMatchListener[] listeners = ConsolePlugin.getDefault().getConsoleManager().createPatternMatchListeners(console);
+		for (final IPatternMatchListener listener : listeners) {
+			console.addPatternMatchListener(listener);
+		}
+
+		// set the console input AFTER initializing pattern match listeners
 		console.getDocument().set(stacktrace);
+
+		// now create the viewer and add it to the trace group
 		final JavaStackTraceConsoleViewer viewer = new JavaStackTraceConsoleViewer(traceGroup, console);
 		viewer.setEditable(false);
 		// set the group's background color for seamless integration
 		viewer.getControl().setBackground(traceGroup.getBackground());
 
 		// make sure to destroy the console when the dialog is closed
-		traceGroup.addDisposeListener(e -> console.destroy());
+		traceGroup.addDisposeListener(e -> {
+			// disconnect the listeners first
+			for (final IPatternMatchListener listener : listeners) {
+				console.removePatternMatchListener(listener);
+			}
+
+			// destroy the console instance itself
+			console.destroy();
+		});
 	}
 
 	private Composite createGeneralFields(final SashForm parent) {
