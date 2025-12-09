@@ -19,9 +19,10 @@ import java.util.function.Function;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.events.ControlListener;
+import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.events.MouseListener;
-import org.eclipse.swt.events.MouseMoveListener;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
@@ -183,38 +184,51 @@ public class LogEventTable extends Composite {
 		
 		final Sash columnSash = new Sash(header, SWT.VERTICAL | SWT.SMOOTH);
 		columnSash.setLayoutData(new RowData(SASH_WIDTH, table.getHeaderHeight()));
-		columnSash.addMouseListener(new MouseListener() {
+		columnSash.addMouseListener(new MouseAdapter() {
 
-			/**
-			 * The {@link MouseMoveListener} to be attached to the {@link Sash}
-			 * when drag starts (upon mouse down event). It will be unregistered
-			 * upon drag end (mouse up event).
-			 */
-			private final MouseMoveListener _move = e -> {
-				final RowData data = (RowData) columnHeader.getLayoutData();
-
-				// only update the size upon actual changes to avoid flickering
-				if (e.x != 0) {
-					data.width += e.x;
-
-					// update the header size to adapt to the new column width
-					header.setSize(header.computeSize(SWT.DEFAULT, minSize.y));
-				}
-			};
+			private SelectionListener _listener = null;
 			
 			@Override
-			public void mouseDoubleClick(final MouseEvent e) {
-				// ignore
+			public void mouseDown(final MouseEvent me) {
+				((Sash) me.widget).addSelectionListener(_listener = new SelectionAdapter() {
+
+					// initialize the x coordinate with the Sash's location
+					// at MouseDown.
+					private int _x = ((Sash)me.widget).getLocation().x;
+
+					@Override
+					public void widgetSelected(final SelectionEvent se) {
+						final int diff = se.x - _x;
+
+						// fast-path return on zero horizontal changes
+						if (diff == 0) {
+							return;
+						}
+						
+						final RowData data = (RowData) columnHeader.getLayoutData();
+						final int newWidth = data.width + diff;
+
+						if (newWidth < minSize.x) {
+							// do not allow to make the column smaller than the minimum size
+							se.doit = false;
+						} else {
+							// update the sash's current position and column header's width
+							_x = se.x;
+							data.width = newWidth;
+
+							// update the header size to adapt to the new column width
+							header.setSize(header.computeSize(SWT.DEFAULT, minSize.y));
+						}
+					}
+				});
 			}
 
 			@Override
-			public void mouseDown(final MouseEvent e) {
-				((Sash) e.widget).addMouseMoveListener(_move);
-			}
-
-			@Override
-			public void mouseUp(final MouseEvent e) {
-				((Sash) e.widget).removeMouseMoveListener(_move);
+			public void mouseUp(final MouseEvent me) {
+				if (_listener != null) {
+					((Sash) me.widget).removeSelectionListener(_listener);
+					_listener = null;
+				}
 			}
 		});
 		columnSash.addPaintListener(e -> {
