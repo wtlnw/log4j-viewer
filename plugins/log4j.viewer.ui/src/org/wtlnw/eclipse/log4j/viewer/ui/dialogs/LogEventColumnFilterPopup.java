@@ -21,7 +21,6 @@ import java.util.regex.PatternSyntaxException;
 
 import org.eclipse.jface.dialogs.PopupDialog;
 import org.eclipse.jface.layout.GridLayoutFactory;
-import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
@@ -101,7 +100,6 @@ public class LogEventColumnFilterPopup extends PopupDialog {
 		
 		final Label label = new Label(contents, SWT.NONE);
 		label.setText("Filter " + getFilter().getProperty().getName());
-		label.setFont(JFaceResources.getBannerFont());
 		label.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 		
 		final ToolBar toolbar = new ToolBar(contents, SWT.FLAT);
