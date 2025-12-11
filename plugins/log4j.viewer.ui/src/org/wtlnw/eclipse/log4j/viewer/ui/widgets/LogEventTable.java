@@ -16,23 +16,26 @@ package org.wtlnw.eclipse.log4j.viewer.ui.widgets;
 
 import java.util.function.Function;
 
+import org.eclipse.jface.util.Util;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.events.ControlListener;
+import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.events.MouseListener;
-import org.eclipse.swt.events.MouseMoveListener;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.internal.DPIUtil;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.layout.RowData;
 import org.eclipse.swt.layout.RowLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Sash;
 import org.eclipse.swt.widgets.ScrollBar;
@@ -96,10 +99,19 @@ public class LogEventTable extends Composite {
 		table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 		table.getHorizontalBar().addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
 			final ScrollBar bar = (ScrollBar) e.widget;
-			// do NOT use the ScrolledComposite.setOrigin() methods because these
-			// always set the content's location to 0,0 if no scroll bars are
-			// available.
-			header.setLocation(new Point(-bar.getSelection(), 0));
+			final int move;
+
+			// Bug in SWT which does not convert the ScrollBar.getSelection() to
+			// the appropriate points on HiDPI monitors with zoom-level != 100%.
+			// Remove this when https://github.com/eclipse-platform/eclipse.platform.swt/issues/2877
+			// is fixed.
+			if (Util.isWin32()) {
+				move = -DPIUtil.pixelToPoint(bar.getSelection(), getMonitor().getZoom());
+			} else {
+				move = -bar.getSelection();
+			}
+
+			header.setLocation(move, 0);
 		}));
 
 		// create columns
@@ -107,15 +119,15 @@ public class LogEventTable extends Composite {
 			createColumn(column, header, table);
 		}
 
+		header.pack();
+
 		// now initialize both fields
 		_header = header;
 		_table = table;
 	}
 
 	private Composite createHeader() {
-		final ScrolledComposite container = new ScrolledComposite(this, SWT.NONE);
-		container.setExpandHorizontal(true);
-		container.setExpandVertical(true);
+		final Composite container = new Composite(this, SWT.NONE);
 		
 		final RowLayout layout = new RowLayout();
 		layout.marginLeft = layout.marginRight = 0;
@@ -127,9 +139,6 @@ public class LogEventTable extends Composite {
 
 		final Composite header = new Composite(container, SWT.NONE);
 		header.setLayout(layout);
-		header.addListener(SWT.Resize, e -> container.setMinWidth(header.getSize().x));
-		
-		container.setContent(header);
 
 		return header;
 	}
@@ -138,15 +147,22 @@ public class LogEventTable extends Composite {
 		final Table table = new Table(this, SWT.FULL_SELECTION | SWT.VIRTUAL);
 		table.setHeaderVisible(false);
 		table.setLinesVisible(true);
+
+		// Workaround on Windows for ScrollBars not firing a SelectionEvent
+		// upon changes to the table's width in general (through resizing or layout).
+		// Remove this when https://github.com/eclipse-platform/eclipse.platform.swt/issues/2878
+		// is fixed.
+		if (Util.isWin32()) {
+			table.addControlListener(ControlListener.controlResizedAdapter(e -> {
+				((Table) e.widget).getHorizontalBar().notifyListeners(SWT.Selection, new Event());
+			}));
+		}
+
 		return table;
 	}
 
 	private void createColumn(final LogEventColumn column, final Composite header, final Table table) {
 		checkWidget();
-		
-		if (table.getColumnCount() > 0) {
-			createColumnSash(header, table);
-		}
 		
 		final Composite columnHeader = createColumnHeader(column, header, table);
 		columnHeader.setLayoutData(new RowData(columnHeader.computeSize(SWT.DEFAULT, SWT.DEFAULT)));
@@ -160,20 +176,27 @@ public class LogEventTable extends Composite {
 				width += HEADER_SPACING;
 
 				final int first = 0;
-				final int last = table.getColumnCount() - 1;
 				final int index = table.indexOf(columnItem);
 
 				if (index == first) {
 					width += SASH_WIDTH / 2 + 1;
-				} else if (index == last) {
-					width += SASH_WIDTH / 2;
 				} else {
 					width += HEADER_SPACING + SASH_WIDTH;
 				}
 			}
 
 			columnItem.setWidth(width);
+
+			// Workaround on Windows for ScrollBars not firing a SelectionEvent
+			// upon changes to column widths which change the thumb size.
+			// Remove this when https://github.com/eclipse-platform/eclipse.platform.swt/issues/2878
+			// is fixed.
+			if (Util.isWin32()) {
+				table.getHorizontalBar().notifyListeners(SWT.Selection, new Event());
+			}
 		}));
+
+		createColumnSash(header, table);
 	}
 
 	private void createColumnSash(final Composite header, final Table table) {
@@ -183,38 +206,51 @@ public class LogEventTable extends Composite {
 		
 		final Sash columnSash = new Sash(header, SWT.VERTICAL | SWT.SMOOTH);
 		columnSash.setLayoutData(new RowData(SASH_WIDTH, table.getHeaderHeight()));
-		columnSash.addMouseListener(new MouseListener() {
+		columnSash.addMouseListener(new MouseAdapter() {
 
-			/**
-			 * The {@link MouseMoveListener} to be attached to the {@link Sash}
-			 * when drag starts (upon mouse down event). It will be unregistered
-			 * upon drag end (mouse up event).
-			 */
-			private final MouseMoveListener _move = e -> {
-				final RowData data = (RowData) columnHeader.getLayoutData();
-
-				// only update the size upon actual changes to avoid flickering
-				if (e.x != 0) {
-					data.width += e.x;
-
-					// update the header size to adapt to the new column width
-					header.setSize(header.computeSize(SWT.DEFAULT, minSize.y));
-				}
-			};
+			private SelectionListener _listener = null;
 			
 			@Override
-			public void mouseDoubleClick(final MouseEvent e) {
-				// ignore
+			public void mouseDown(final MouseEvent me) {
+				((Sash) me.widget).addSelectionListener(_listener = new SelectionAdapter() {
+
+					// initialize the x coordinate with the Sash's location
+					// at MouseDown.
+					private int _x = ((Sash)me.widget).getLocation().x;
+
+					@Override
+					public void widgetSelected(final SelectionEvent se) {
+						final int diff = se.x - _x;
+
+						// fast-path return on zero horizontal changes
+						if (diff == 0) {
+							return;
+						}
+						
+						final RowData data = (RowData) columnHeader.getLayoutData();
+						final int newWidth = data.width + diff;
+
+						if (newWidth < minSize.x) {
+							// do not allow to make the column smaller than the minimum size
+							se.doit = false;
+						} else {
+							// update the sash's current position and column header's width
+							_x = se.x;
+							data.width = newWidth;
+
+							// update the header size to adapt to the new column width
+							header.setSize(header.computeSize(SWT.DEFAULT, minSize.y));
+						}
+					}
+				});
 			}
 
 			@Override
-			public void mouseDown(final MouseEvent e) {
-				((Sash) e.widget).addMouseMoveListener(_move);
-			}
-
-			@Override
-			public void mouseUp(final MouseEvent e) {
-				((Sash) e.widget).removeMouseMoveListener(_move);
+			public void mouseUp(final MouseEvent me) {
+				if (_listener != null) {
+					((Sash) me.widget).removeSelectionListener(_listener);
+					_listener = null;
+				}
 			}
 		});
 		columnSash.addPaintListener(e -> {
