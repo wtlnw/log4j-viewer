@@ -16,8 +16,8 @@ package org.wtlnw.eclipse.log4j.viewer.ui.widgets;
 
 import java.util.function.Function;
 
+import org.eclipse.jface.util.Util;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.custom.ScrolledComposite;
 import org.eclipse.swt.events.ControlListener;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
@@ -28,12 +28,14 @@ import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.internal.DPIUtil;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.layout.RowData;
 import org.eclipse.swt.layout.RowLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Sash;
 import org.eclipse.swt.widgets.ScrollBar;
@@ -97,10 +99,19 @@ public class LogEventTable extends Composite {
 		table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 		table.getHorizontalBar().addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
 			final ScrollBar bar = (ScrollBar) e.widget;
-			// do NOT use the ScrolledComposite.setOrigin() methods because these
-			// always set the content's location to 0,0 if no scroll bars are
-			// available.
-			header.setLocation(new Point(-bar.getSelection(), 0));
+			final int move;
+
+			// Bug in SWT which does not convert the ScrollBar.getSelection() to
+			// the appropriate points on HiDPI monitors with zoom-level != 100%.
+			// Remove this when https://github.com/eclipse-platform/eclipse.platform.swt/issues/2877
+			// is fixed.
+			if (Util.isWin32()) {
+				move = -DPIUtil.pixelToPoint(bar.getSelection(), getMonitor().getZoom());
+			} else {
+				move = -bar.getSelection();
+			}
+
+			header.setLocation(move, 0);
 		}));
 
 		// create columns
@@ -108,15 +119,15 @@ public class LogEventTable extends Composite {
 			createColumn(column, header, table);
 		}
 
+		header.pack();
+
 		// now initialize both fields
 		_header = header;
 		_table = table;
 	}
 
 	private Composite createHeader() {
-		final ScrolledComposite container = new ScrolledComposite(this, SWT.NONE);
-		container.setExpandHorizontal(true);
-		container.setExpandVertical(true);
+		final Composite container = new Composite(this, SWT.NONE);
 		
 		final RowLayout layout = new RowLayout();
 		layout.marginLeft = layout.marginRight = 0;
@@ -128,9 +139,6 @@ public class LogEventTable extends Composite {
 
 		final Composite header = new Composite(container, SWT.NONE);
 		header.setLayout(layout);
-		header.addListener(SWT.Resize, e -> container.setMinWidth(header.getSize().x));
-		
-		container.setContent(header);
 
 		return header;
 	}
@@ -167,6 +175,14 @@ public class LogEventTable extends Composite {
 			}
 
 			columnItem.setWidth(width);
+
+			// Workaround on Windows for ScrollBars not firing a SelectionEvent
+			// upon changes to column widths which change the thumb size.
+			// Remove this when https://github.com/eclipse-platform/eclipse.platform.swt/issues/2878
+			// is fixed.
+			if (Util.isWin32()) {
+				table.getHorizontalBar().notifyListeners(SWT.Selection, new Event());
+			}
 		}));
 
 		createColumnSash(header, table);
