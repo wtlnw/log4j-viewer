@@ -147,6 +147,17 @@ public class LogEventTable extends Composite {
 		final Table table = new Table(this, SWT.FULL_SELECTION | SWT.VIRTUAL);
 		table.setHeaderVisible(false);
 		table.setLinesVisible(true);
+
+		// Workaround on Windows for ScrollBars not firing a SelectionEvent
+		// upon changes to the table's width in general (through resizing or layout).
+		// Remove this when https://github.com/eclipse-platform/eclipse.platform.swt/issues/2878
+		// is fixed.
+		if (Util.isWin32()) {
+			table.addControlListener(ControlListener.controlResizedAdapter(e -> {
+				((Table) e.widget).getHorizontalBar().notifyListeners(SWT.Selection, new Event());
+			}));
+		}
+
 		return table;
 	}
 
