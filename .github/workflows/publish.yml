@@ -25,12 +25,9 @@ jobs:
       - name: Build Tycho
         run: mvn -B -U clean verify
 
-      - name: Install xmllint
-        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
-
-      - name: Extract stamped version
+      - name: Extract version
         run: |
-          VERSION=$(xmllint --xpath "string(//revision)" pom.xml)
+          VERSION=$(grep -oP '(?<=<revision>).*?(?=</revision>)' pom.xml)
           echo "VERSION=$VERSION"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
