@@ -137,13 +137,17 @@ public class LogViewerPart extends ViewPart {
 		final int port = _prefs.getInt(LogViewerPreferenceConstants.PORT);
 		final int timeout = _prefs.getInt(LogViewerPreferenceConstants.TIMEOUT);
 		_server = new LogEventServer(port, timeout, new LogEventSupplierRegistry().getFactories(), e -> {
-			Util.exclusive(_lock.writeLock(), () -> {
-				if (_buffer.depleted()) {
-					// block this thread until we have updated the table (hence syncExec())
-					PlatformUI.getWorkbench().getDisplay().syncExec(() -> updateTable(false));
-				}
+			// add event to event buffer, potentially flushing it to data buffers
+			final int changes = Util.exclusive(_lock.writeLock(), () -> {
+				final int visible = _buffer.depleted() ? flush() : 0;
 				_buffer.put(e);
+				return visible;
 			});
+
+			// update the table if event buffer was flushed due to depletion
+			if (changes > 0) {
+				site.getShell().getDisplay().asyncExec(() -> updateTable(changes, false));
+			}
 		});
 		_server.addErrorListener((msg, ex) -> {
 			final ILog log = Platform.getLog(getClass());
@@ -611,18 +615,56 @@ public class LogViewerPart extends ViewPart {
 	 * filter.
 	 * 
 	 * <p>
-	 * Note: has no effect if updating was paused or no new entries were found.
+	 * Note: has no effect if the given number of events is less than one.
 	 * </p>
 	 * 
-	 * @param repeat {@code true} to automatically schedule the next call to this
-	 *               method after the configured amount of milliseconds or
-	 *               {@code false} to perform a one-time update only
+	 * @param changes the number of events to update the table with
+	 * @param repeat  {@code true} to automatically schedule the next call to this
+	 *                method after the configured amount of milliseconds or
+	 *                {@code false} to perform a one-time update only
 	 */
-	private void updateTable(final boolean repeat) {
+	private void updateTable(final int changes, final boolean repeat) {
+		// update the table
+		if (_viewer != null && !_viewer.isDisposed()) {
+			// only update the table if there is at least one new event
+			// to display, thus avoiding unnecessary flickering.
+			if (changes > 0) {
+				// remember the current selection
+				final int oldTableIndex = _viewer.getTable().getSelectionIndex();
+
+				// update the table first
+				_viewer.getTable().setItemCount(_tableData.getSize());
+				_viewer.getTable().clearAll();
+
+				// try to preserve the selection (if possible)
+				if (oldTableIndex > -1) {
+					final int newTableIndex = oldTableIndex + changes;
+					if (newTableIndex < _viewer.getTable().getItemCount()) {
+						_viewer.getTable().select(newTableIndex);
+					} else {
+						_viewer.getTable().deselectAll();
+					}
+				}
+			}
+
+			// repeat after configured amount of time
+			if (repeat) {
+				scheduleTableUpdate();
+			}
+		}
+	}
+
+	/**
+	 * Flush the contents of the event buffer to data buffers respecting the
+	 * currently set filters.
+	 * 
+	 * @return the number of events to update the table with
+	 */
+	private int flush() {
 		// updates are paused, just clear the buffer and proceed
 		if (_pause.isChecked()) {
 			_buffer.clear();
-			return;
+			return 0;
 		}
 
 		// keep track of new items to be displayed
@@ -643,34 +685,7 @@ public class LogViewerPart extends ViewPart {
 		}
 		_buffer.clear();
 
-		// update the table
-		if (_viewer != null && !_viewer.isDisposed()) {
-			// only update the table if there is at least one new event
-			// to display, thus avoiding unnecessary flickering.
-			if (added > 0) {
-				// remember the current selection
-				final int oldTableIndex = _viewer.getTable().getSelectionIndex();
-
-				// update the table first
-				_viewer.getTable().setItemCount(_tableData.getSize());
-				_viewer.getTable().clearAll();
-
-				// try to preserve the selection (if possible)
-				if (oldTableIndex > -1) {
-					final int newTableIndex = oldTableIndex + added;
-					if (newTableIndex < _viewer.getTable().getItemCount()) {
-						_viewer.getTable().select(newTableIndex);
-					} else {
-						_viewer.getTable().deselectAll();
-					}
-				}
-			}
-
-			// repeat after configured amount of time
-			if (repeat) {
-				scheduleTableUpdate();
-			}
-		}
+		return added;
 	}
 
 	/**
@@ -680,7 +695,7 @@ public class LogViewerPart extends ViewPart {
 	private void scheduleTableUpdate() {
 		_viewer.getDisplay().timerExec(_refreshMillis, () -> {
 			Util.exclusive(_lock.writeLock(), () -> {
-				updateTable(true);
+				updateTable(flush(), true);
 			});
 		});
 	}
