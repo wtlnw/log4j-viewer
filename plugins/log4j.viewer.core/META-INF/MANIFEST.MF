@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Log4j Viewer Core
 Bundle-SymbolicName: log4j.viewer.core;singleton:=true
-Bundle-Version: 1.0.0.qualifier
+Bundle-Version: 1.1.0.qualifier
 Export-Package: org.wtlnw.eclipse.log4j.viewer.core.api,
  org.wtlnw.eclipse.log4j.viewer.core.filter,
  org.wtlnw.eclipse.log4j.viewer.core.impl,
