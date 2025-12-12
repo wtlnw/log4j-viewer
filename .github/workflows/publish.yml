@@ -30,9 +30,7 @@ jobs:
 
       - name: Extract stamped version
         run: |
-          unzip -p sites/log4j.viewer.updatesite/target/repository/content.jar content.xml > content.xml
-
-          VERSION=$(xmllint --xpath "string(//unit/@version)" content.xml)
+          VERSION=$(xmllint --xpath "string(//revision)" pom.xml)
           echo "VERSION=$VERSION"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
