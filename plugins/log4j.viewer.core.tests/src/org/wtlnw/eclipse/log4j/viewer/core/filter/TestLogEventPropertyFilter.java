@@ -39,7 +39,7 @@ class TestLogEventPropertyFilter {
 
 	@BeforeEach
 	void setup() {
-		_filter = new LogEventPropertyFilter(LogEventProperty.CATEGORY);
+		_filter = new LogEventPropertyFilter(LogEventProperty.CATEGORY).setEnabled(true);
 		_event = new MutableLogEvent();
 	}
 
@@ -244,5 +244,43 @@ class TestLogEventPropertyFilter {
 		_filter.setRegularExpression(false);
 		_filter.setPattern("[abc");
 		Assertions.assertThrows(PatternSyntaxException.class, () -> _filter.setRegularExpression(true));
+	}
+
+	@Test
+	void disabledFilter() {
+		_event.setLoggerName("xyz");
+		_filter.setPattern("abc");
+
+		// test that filters are enabled by default
+		Assertions.assertFalse(_filter.test(_event));
+
+		// test that disabled filters always return true
+		_filter.setEnabled(false);
+		Assertions.assertTrue(_filter.test(_event));
+
+		// test that re-enabling the filter actually works
+		_filter.setEnabled(true);
+		Assertions.assertFalse(_filter.test(_event));
+	}
+
+	@Test
+	void testCopy() {
+		final LogEventPropertyFilter src = new LogEventPropertyFilter(LogEventProperty.CATEGORY);
+		src.setEnabled(false);
+		src.setInverse(true);
+		src.setMatchCase(true);
+		src.setPattern("abc");
+		src.setRegularExpression(true);
+		src.setWholeWord(true);
+		Assertions.assertThrows(IllegalArgumentException.class, () -> LogEventPropertyFilter.copy(src, new LogEventPropertyFilter(LogEventProperty.LEVEL)));
+
+		final LogEventPropertyFilter tgt = new LogEventPropertyFilter(LogEventProperty.CATEGORY);
+		Assertions.assertDoesNotThrow(() -> LogEventPropertyFilter.copy(src, tgt));
+		Assertions.assertEquals(src.isEnabled(), tgt.isEnabled());
+		Assertions.assertEquals(src.isInverse(), tgt.isInverse());
+		Assertions.assertEquals(src.isMatchCase(), tgt.isMatchCase());
+		Assertions.assertEquals(src.getPattern(), tgt.getPattern());
+		Assertions.assertEquals(src.isRegularExpression(), tgt.isRegularExpression());
+		Assertions.assertEquals(src.isWholeWord(), tgt.isWholeWord());
 	}
 }

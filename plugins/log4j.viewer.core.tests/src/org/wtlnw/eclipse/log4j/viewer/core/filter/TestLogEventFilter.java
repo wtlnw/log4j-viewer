@@ -26,16 +26,18 @@ class TestLogEventFilter {
 
 	@Test
 	void test() {
-		final LogEventPropertyFilter loggerFilter = new LogEventPropertyFilter(LogEventProperty.CATEGORY);
-		loggerFilter.setPattern("logger");
-		final LogEventPropertyFilter levelFilter = new LogEventPropertyFilter(LogEventProperty.LEVEL);
-		levelFilter.setPattern("info");
-		
-		final LogEventFilter filter = new LogEventFilter();
-		filter.getFilters().add(loggerFilter);
-		filter.getFilters().add(levelFilter);
-		
 		final MutableLogEvent event = new MutableLogEvent();
+
+		final LogEventFilter filter = new LogEventFilter();
+		filter.get(LogEventProperty.CATEGORY).setPattern("logger");
+		filter.get(LogEventProperty.LEVEL).setPattern("info");
+
+		// no filters are active by default, the event must be accepted
+		Assertions.assertTrue(filter.test(event));
+
+		// activate the CATEGORY and LEVEl filters
+		filter.get(LogEventProperty.CATEGORY).setEnabled(true);
+		filter.get(LogEventProperty.LEVEL).setEnabled(true);
 		Assertions.assertFalse(filter.test(event));
 		
 		event.setLoggerName("logger");
@@ -46,14 +48,11 @@ class TestLogEventFilter {
 	}
 
 	@Test
-	void testGetByProperty() {
-		final LogEventPropertyFilter categoryFilter = new LogEventPropertyFilter(LogEventProperty.CATEGORY);
-		final LogEventPropertyFilter levelFilter = new LogEventPropertyFilter(LogEventProperty.LEVEL);
+	void testDefaults() {
 		final LogEventFilter filter = new LogEventFilter();
-		filter.getFilters().add(categoryFilter);
-		filter.getFilters().add(levelFilter);
 
-		Assertions.assertEquals(categoryFilter, filter.get(LogEventProperty.CATEGORY));
-		Assertions.assertNull(filter.get(LogEventProperty.MESSAGE));
+		Assertions.assertEquals(LogEventProperty.values().length, filter.getFilters().size());
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> filter.getFilters().add(new LogEventPropertyFilter(LogEventProperty.CATEGORY)));
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> filter.getFilters().remove(0));
 	}
 }

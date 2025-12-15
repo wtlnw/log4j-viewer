@@ -34,6 +34,11 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 	 * @see #getProperty()
 	 */
 	private final LogEventProperty _property;
+
+	/**
+	 * @see #isEnabled()
+	 */
+	private boolean _enabled = false;
 	
 	/**
 	 * @see #isMatchCase()
@@ -61,7 +66,7 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 	private Pattern _pattern;
 	
 	/**
-	 * Create a {@link LogEventPropertyFilter}.
+	 * Create a {@link LogEventPropertyFilter} which is disabled by default.
 	 * 
 	 * @param property see {@link #getProperty()}
 	 */
@@ -78,6 +83,27 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 	}
 
 	/**
+	 * @return {@code true} if this filter is enabled, {@code false} otherwise
+	 * @see #test(LogEvent)
+	 */
+	public boolean isEnabled() {
+		return _enabled;
+	}
+
+	/**
+	 * Setter for {@link #isEnabled()}.
+	 * 
+	 * @param enabled see {@link #isEnabled()}
+	 * @return this {@link LogEventPropertyFilter} for convenient call chaining
+	 * @see #test(LogEvent)
+	 */
+	public LogEventPropertyFilter setEnabled(final boolean enabled) {
+		_enabled = enabled;
+
+		return this;
+	}
+
+	/**
 	 * @return {@code true} to explicitly match character's case, {@code false} for
 	 *         case-insensitive filtering
 	 */
@@ -89,14 +115,17 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 	 * Setter for {@link #isMatchCase()}.
 	 * 
 	 * @param matchCase see {@link #isMatchCase()}
+	 * @return this {@link LogEventPropertyFilter} for convenient call chaining
 	 */
-	public void setMatchCase(final boolean matchCase) {
+	public LogEventPropertyFilter setMatchCase(final boolean matchCase) {
 		_matchCase = matchCase;
 		
 		// re-build the pattern if it had already been built
 		if (_pattern != null) {
 			_pattern = build(_pattern.pattern());
 		}
+		
+		return this;
 	}
 
 	/**
@@ -111,14 +140,17 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 	 * Setter for {@link #isRegularExpression()}.
 	 * 
 	 * @param regex see {@link #isRegularExpression()}
+	 * @return this {@link LogEventPropertyFilter} for convenient call chaining
 	 */
-	public void setRegularExpression(final boolean regex) {
+	public LogEventPropertyFilter setRegularExpression(final boolean regex) {
 		_regex = regex;
 
 		// re-build the pattern if it had already been built
 		if (_pattern != null) {
 			_pattern = build(_pattern.pattern());
 		}
+
+		return this;
 	}
 
 	/**
@@ -133,9 +165,12 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 	 * Setter for {@link #isWholeWord()}.
 	 * 
 	 * @param wholeWord see {@link #isWholeWord()}
+	 * @return this {@link LogEventPropertyFilter} for convenient call chaining
 	 */
-	public void setWholeWord(final boolean wholeWord) {
+	public LogEventPropertyFilter setWholeWord(final boolean wholeWord) {
 		_wholeWord = wholeWord;
+
+		return this;
 	}
 
 	/**
@@ -150,9 +185,12 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 	 * Setter for {@link #isInverse()}.
 	 * 
 	 * @param inverse see {@link #isInverse()}
+	 * @return this {@link LogEventPropertyFilter} for convenient call chaining
 	 */
-	public void setInverse(final boolean inverse) {
+	public LogEventPropertyFilter setInverse(final boolean inverse) {
 		_inverse = inverse;
+
+		return this;
 	}
 
 	/**
@@ -166,9 +204,12 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 	 * Setter for {@link #getPattern()}.
 	 * 
 	 * @param pattern see {@link #getPattern()}
+	 * @return this {@link LogEventPropertyFilter} for convenient call chaining
 	 */
-	public void setPattern(final String pattern) {
+	public LogEventPropertyFilter setPattern(final String pattern) {
 		_pattern = build(Objects.requireNonNull(pattern));
+
+		return this;
 	}
 
 	private Pattern build(final String pattern) {
@@ -187,12 +228,44 @@ public class LogEventPropertyFilter implements Predicate<LogEvent> {
 		return Pattern.compile(pattern, flags);
 	}
 
+	/**
+	 * @return {@code true} if the given {@link LogEvent} satisfies the receiver's
+	 *         criteria, {@code false} otherwise. Disabled receiver's always return
+	 *         {@code true}.
+	 */
 	@Override
 	public boolean test(final LogEvent event) {
+		// fast-path return for disabled filters
+		if (!_enabled) {
+			return true;
+		}
+		
 		final String value = _property.getValueProvider().apply(event);
 		final Matcher matcher = _pattern.matcher(value == null ? "" : value);
 		final boolean result = _wholeWord ? matcher.matches() : matcher.find();
 		
 		return _inverse ? !result : result;
+	}
+
+	/**
+	 * Copy all settings from source to target.
+	 * 
+	 * @param src the {@link LogEventPropertyFilter} to copy the settings from
+	 * @param tgt the {@link LogEventPropertyFilter} to copy the settings to
+	 * @throws IllegalArgumentException if the given filters have different
+	 *                                  {@link LogEventProperty}s
+	 */
+	public static void copy(final LogEventPropertyFilter src, final LogEventPropertyFilter tgt) {
+		if (src.getProperty() != tgt.getProperty()) {
+			throw new IllegalArgumentException(String.format("Cannot copy settings from %s to %s", 
+					src.getProperty().getName(), tgt.getProperty().getName()));
+		}
+
+		tgt.setEnabled(src.isEnabled());
+		tgt.setInverse(src.isInverse());
+		tgt.setMatchCase(src.isMatchCase());
+		tgt.setPattern(src.getPattern());
+		tgt.setRegularExpression(src.isRegularExpression());
+		tgt.setWholeWord(src.isWholeWord());
 	}
 }

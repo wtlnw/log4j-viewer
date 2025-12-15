@@ -15,6 +15,7 @@
 package org.wtlnw.eclipse.log4j.viewer.core.filter;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
 
@@ -28,10 +29,24 @@ public class LogEventFilter implements Predicate<LogEvent> {
 	/**
 	 * @see #getFilters()
 	 */
-	private final List<LogEventPropertyFilter> _filters = new ArrayList<>();
+	private final List<LogEventPropertyFilter> _filters;
 
 	/**
-	 * @return a (possibly empty) modifiable {@link List} of receiver's {@link LogEventPropertyFilter}s
+	 * Create a {@link LogEventFilter}.
+	 */
+	public LogEventFilter() {
+		final List<LogEventPropertyFilter> filters = new ArrayList<>();
+
+		for (final LogEventProperty property : LogEventProperty.values()) {
+			filters.add(new LogEventPropertyFilter(property));
+		}
+
+		_filters = Collections.unmodifiableList(filters);
+	}
+	
+	/**
+	 * @return an unmodifiable {@link List} of {@link LogEventPropertyFilter}s for
+	 *         each {@link LogEventProperty}
 	 */
 	public List<LogEventPropertyFilter> getFilters() {
 		return _filters;
@@ -41,7 +56,7 @@ public class LogEventFilter implements Predicate<LogEvent> {
 	 * @param property the {@link LogEventProperty} to return the registered
 	 *                 {@link LogEventPropertyFilter} for
 	 * @return the {@link LogEventPropertyFilter} for the given
-	 *         {@link LogEventProperty} or {@code null} if non was registered
+	 *         {@link LogEventProperty}
 	 */
 	public LogEventPropertyFilter get(final LogEventProperty property) {
 		for (final LogEventPropertyFilter filter : _filters) {
@@ -49,8 +64,10 @@ public class LogEventFilter implements Predicate<LogEvent> {
 				return filter;
 			}
 		}
-		
-		return null;
+
+		// since we are creating a filter for each declared property,
+		// this error is never thrown.
+		throw new AssertionError("No filter found for property: " + property.getName());
 	}
 	
 	@Override
