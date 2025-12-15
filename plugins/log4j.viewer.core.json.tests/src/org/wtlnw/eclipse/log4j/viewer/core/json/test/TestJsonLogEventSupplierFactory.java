@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.wtlnw.eclipse.log4j.viewer.core.api.LogEventSupplierFactory;
 import org.wtlnw.eclipse.log4j.viewer.core.impl.LogEventServer;
+import org.wtlnw.eclipse.log4j.viewer.core.impl.SerializedLogEventSupplierFactory;
 import org.wtlnw.eclipse.log4j.viewer.core.json.impl.JsonLogEventSupplierFactory;
 
 /**
@@ -78,27 +79,55 @@ public class TestJsonLogEventSupplierFactory {
 			</Configuration>
 			""";
 
+	private static final String CONFIG_SERIALIZED = """
+			<Configuration xmlns="https://logging.apache.org/xml/ns"
+			               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+			               xsi:schemaLocation="
+			                   https://logging.apache.org/xml/ns
+			                   https://logging.apache.org/xml/ns/log4j-config-2.xsd">
+			  <Appenders>
+			    <Socket name="SOCKET_APPENDER" host="localhost" port="4445">
+			      <SerializedLayout/>
+			    </Socket>
+			  </Appenders>
+			  <Loggers>
+			    <Root level="INFO">
+			      <AppenderRef ref="SOCKET_APPENDER"/>
+			    </Root>
+			  </Loggers>
+			</Configuration>
+			""";
+
 	@Test
 	void testComplete() throws IOException, InterruptedException {
-		runWithConfiguration(config(CONFIG_COMPLETE));
+		runWithConfiguration(config(CONFIG_COMPLETE), new JsonLogEventSupplierFactory());
 	}
 
 	@Test
 	void testFragments() throws IOException, InterruptedException {
-		runWithConfiguration(config(CONFIG_FRAGMENTS));
+		runWithConfiguration(config(CONFIG_FRAGMENTS), new JsonLogEventSupplierFactory());
 	}
-	
+
+	@Test
+	void testMultiSuppliers1() throws IOException, InterruptedException {
+		runWithConfiguration(config(CONFIG_FRAGMENTS), new SerializedLogEventSupplierFactory(), new JsonLogEventSupplierFactory());
+	}
+
+	@Test
+	void testMultiSuppliers2() throws IOException, InterruptedException {
+		runWithConfiguration(config(CONFIG_SERIALIZED), new JsonLogEventSupplierFactory(), new SerializedLogEventSupplierFactory());
+	}
+
 	@SuppressWarnings("deprecation")
-	private void runWithConfiguration(final Configuration config) throws IOException, InterruptedException {
+	private void runWithConfiguration(final Configuration config, final LogEventSupplierFactory... factories) throws IOException, InterruptedException {
 		// use a semaphore to block until the handler thread fails
 		// which is a signal for us that either an error occurred or
 		// end of stream was reached.
 		final Semaphore sema = new Semaphore(0);
 		
 		final List<LogEvent> events = new ArrayList<>();
-		final List<LogEventSupplierFactory> factories = List.of(new JsonLogEventSupplierFactory());
 		final List<Throwable> errors = new ArrayList<>();
-		final LogEventServer server = new LogEventServer(factories, events::add);
+		final LogEventServer server = new LogEventServer(List.of(factories), events::add);
 		server.addErrorListener((msg, ex) -> {
 			if (ex instanceof EOFException) {
 				// ignore EOF
