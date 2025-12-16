@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Log4j Viewer Core Json Tests
 Bundle-SymbolicName: log4j.viewer.core.json.tests
-Bundle-Version: 1.1.0.qualifier
+Bundle-Version: 1.2.0.qualifier
 Require-Bundle: org.junit,
  junit-jupiter-api,
  log4j.viewer.core.json

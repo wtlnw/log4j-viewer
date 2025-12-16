@@ -2,7 +2,7 @@
 <feature
       id="log4j.viewer.feature"
       label="Log4J Viewer"
-      version="1.1.0.qualifier">
+      version="1.2.0.qualifier">
 
    <description>
       This feature provides a set of eclipse plugins (backend and frontend)
