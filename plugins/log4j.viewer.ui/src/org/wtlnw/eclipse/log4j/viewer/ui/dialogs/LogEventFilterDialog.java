@@ -135,10 +135,11 @@ public class LogEventFilterDialog extends TrayDialog {
 
 		final ToolItem enabled = new ToolItem(toolbar, SWT.CHECK);
 		enabled.setImage(getEnabledImageFunction().apply(filter.isEnabled()));
-		enabled.setToolTipText("Activate to enable");
+		enabled.setToolTipText(getEnabledTooltipFunction().apply(filter.isEnabled()));
 		enabled.setSelection(filter.isEnabled());
 		enabled.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
 			enabled.setImage(getEnabledImageFunction().apply(enabled.getSelection()));
+			enabled.setToolTipText(getEnabledTooltipFunction().apply(enabled.getSelection()));
 		}));
 		
 		new ToolItem(toolbar, SWT.SEPARATOR);
@@ -228,7 +229,16 @@ public class LogEventFilterDialog extends TrayDialog {
 		return enabled -> Activator.getInstance().getImageRegistry()
 				.get(enabled ? Activator.IMG_PAUSE : Activator.IMG_START);
 	}
-	
+
+	/**
+	 * @return the {@link Function} which computes the tooltip {@link String} to be
+	 *         used for the {@link ToolItem} representing activation state of a
+	 *         filter
+	 */
+	private Function<Boolean, String> getEnabledTooltipFunction() {
+		return enabled -> enabled ? "Deactivate to disable" : "Activate to enable";
+	}
+
 	@Override
 	protected void okPressed() {
 		// transfer the values from UI to filters first
@@ -241,5 +251,11 @@ public class LogEventFilterDialog extends TrayDialog {
 	@Override
 	public boolean isHelpAvailable() {
 		return false;
+	}
+
+	@Override
+	protected void createButtonsForButtonBar(final Composite parent) {
+		createButton(parent, IDialogConstants.CANCEL_ID, IDialogConstants.CANCEL_LABEL, false);
+		createButton(parent, IDialogConstants.OK_ID, "Apply and Close", true);
 	}
 }
