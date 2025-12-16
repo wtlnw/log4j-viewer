@@ -14,6 +14,8 @@
 
 package org.wtlnw.eclipse.log4j.viewer.ui.views;
 
+import java.util.Optional;
+
 import org.eclipse.ui.IMemento;
 import org.wtlnw.eclipse.log4j.viewer.core.filter.LogEventFilter;
 import org.wtlnw.eclipse.log4j.viewer.core.filter.LogEventProperty;
@@ -24,6 +26,11 @@ import org.wtlnw.eclipse.log4j.viewer.core.filter.LogEventPropertyFilter;
  * {@link IMemento} when saving or restoring the part's state.
  */
 public class LogViewerPartMementoHandler {
+
+	/**
+	 * @see LogEventPropertyFilter#isEnabled()
+	 */
+	private static final String ATTR_ENABLED = "enabled";
 
 	/**
 	 * @see LogEventPropertyFilter#isWholeWord()
@@ -75,14 +82,15 @@ public class LogViewerPartMementoHandler {
 		final IMemento filterMemento = memento.getChild(TAG_EVENT_FILTER);
 		if (filterMemento != null) {
 			for (final IMemento propertyMemento : filterMemento.getChildren(TAG_PROPERTY_FILTER)) {
-				final LogEventPropertyFilter propertyFilter = new LogEventPropertyFilter(LogEventProperty.valueOf(propertyMemento.getString(ATTR_PROPERTY)));
-				
+				final LogEventPropertyFilter propertyFilter = filter.get(LogEventProperty.valueOf(propertyMemento.getString(ATTR_PROPERTY)));
+				// for compatibility with 1.0.x: since only enabled filters were 
+				// stored back then, missing property is treated as true.
+				propertyFilter.setEnabled(Optional.ofNullable(propertyMemento.getBoolean(ATTR_ENABLED)).orElse(Boolean.TRUE).booleanValue());
 				propertyFilter.setInverse(propertyMemento.getBoolean(ATTR_INVERSE));
 				propertyFilter.setMatchCase(propertyMemento.getBoolean(ATTR_MATCH_CASE));
 				propertyFilter.setRegularExpression(propertyMemento.getBoolean(ATTR_REGULAR_EXPRESSION));
 				propertyFilter.setWholeWord(propertyMemento.getBoolean(ATTR_WHOLE_WORD));
-				propertyFilter.setPattern(propertyMemento.getTextData() == null ? "" : propertyMemento.getTextData());
-				filter.getFilters().add(propertyFilter);
+				propertyFilter.setPattern(Optional.ofNullable(propertyMemento.getTextData()).orElse(""));
 			}
 		}
 
@@ -100,6 +108,7 @@ public class LogViewerPartMementoHandler {
 		for (final LogEventPropertyFilter propertyFilter : filter.getFilters()) {
 			final IMemento propertyMemento = filterMemento.createChild(TAG_PROPERTY_FILTER);
 			propertyMemento.putString(ATTR_PROPERTY, propertyFilter.getProperty().name());
+			propertyMemento.putBoolean(ATTR_ENABLED, propertyFilter.isEnabled());
 			propertyMemento.putBoolean(ATTR_INVERSE, propertyFilter.isInverse());
 			propertyMemento.putBoolean(ATTR_MATCH_CASE, propertyFilter.isMatchCase());
 			propertyMemento.putBoolean(ATTR_REGULAR_EXPRESSION, propertyFilter.isRegularExpression());
