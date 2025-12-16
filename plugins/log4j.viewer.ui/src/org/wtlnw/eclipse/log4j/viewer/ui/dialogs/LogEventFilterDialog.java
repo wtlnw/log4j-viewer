@@ -74,7 +74,7 @@ public class LogEventFilterDialog extends TrayDialog {
 		super(parent);
 
 		// make sure to use non-modal dialogs with a shell trim.
-		setShellStyle(SWT.SHELL_TRIM);
+		setShellStyle(SWT.APPLICATION_MODAL | SWT.SHELL_TRIM);
 
 		_filter = new LogEventFilter();
 
