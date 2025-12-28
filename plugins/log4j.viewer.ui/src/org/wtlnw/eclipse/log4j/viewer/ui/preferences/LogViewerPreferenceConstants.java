@@ -33,12 +33,6 @@ public interface LogViewerPreferenceConstants {
 	String TIMEOUT = "timeout";
 
 	/**
-	 * The number of milliseconds to wait until refreshing
-	 * the event log view with new data.
-	 */
-	String REFRESH = "refresh";
-
-	/**
 	 * The number of entries to be displayed in the log event view.
 	 */
 	String BUFFER = "buffer";
@@ -62,7 +56,6 @@ public interface LogViewerPreferenceConstants {
 	/**
 	 * The color to be used for displaying warning messages in the log view.
 	 */
-
 	String COLOR_WARN = "color-warn";
 
 	/**

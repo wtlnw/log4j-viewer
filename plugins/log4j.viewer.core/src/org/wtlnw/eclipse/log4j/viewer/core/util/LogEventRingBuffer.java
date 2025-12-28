@@ -67,7 +67,7 @@ public class LogEventRingBuffer {
 	/**
 	 * Create a {@link LogEventRingBuffer}.
 	 * 
-	 * @param capacity the buffer's capacity
+	 * @param capacity see {@link #getCapacity()}
 	 * @throws IllegalArgumentException if the given capacity is less than one
 	 */
 	public LogEventRingBuffer(final int capacity) throws IllegalArgumentException {
@@ -75,6 +75,13 @@ public class LogEventRingBuffer {
 			throw new IllegalArgumentException();
 		}
 		_events = new LogEvent[capacity];
+	}
+
+	/**
+	 * @return the receiver's capacity
+	 */
+	public int getCapacity() {
+		return _events.length;
 	}
 
 	/**

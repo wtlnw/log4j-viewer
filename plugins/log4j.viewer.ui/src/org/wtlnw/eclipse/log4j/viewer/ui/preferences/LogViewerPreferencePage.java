@@ -48,7 +48,6 @@ public class LogViewerPreferencePage extends FieldEditorPreferencePage implement
 		addField(new IntegerFieldEditor(LogViewerPreferenceConstants.TIMEOUT, "Server &timeout [ms]: ", getFieldEditorParent()));
 		addField(new BooleanFieldEditor(LogViewerPreferenceConstants.AUTOSTART, "Server &autostart", getFieldEditorParent()));
 		addField(new IntegerFieldEditor(LogViewerPreferenceConstants.BUFFER, "Event &buffer: ", getFieldEditorParent()));
-		addField(new IntegerFieldEditor(LogViewerPreferenceConstants.REFRESH, "&UI refresh interval [ms]: ", getFieldEditorParent()));
 		
 		addField(new ColorFieldEditor(LogViewerPreferenceConstants.COLOR_DEBUG, "&Debug color: ", getFieldEditorParent()));
 		addField(new ColorFieldEditor(LogViewerPreferenceConstants.COLOR_INFO, "&Info color: ", getFieldEditorParent()));
