@@ -14,6 +14,7 @@
 
 package org.wtlnw.eclipse.log4j.viewer.ui.dialogs;
 
+import java.util.Optional;
 import java.util.function.Function;
 
 import org.apache.logging.log4j.core.LogEvent;
@@ -43,7 +44,6 @@ import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IPatternMatchListener;
 import org.osgi.framework.FrameworkUtil;
 import org.wtlnw.eclipse.log4j.viewer.core.filter.LogEventProperty;
-import org.wtlnw.eclipse.log4j.viewer.ui.util.Util;
 
 /**
  * A {@link TrayDialog} implementation displaying detail information
@@ -240,7 +240,7 @@ public class LogEventDetailDialog extends TrayDialog {
 		LABEL_DATA.applyTo(labelField);
 
 		final Label textField = new Label(contents, SWT.NONE);
-		textField.setText(Util.nonNullOrElse(value.apply(_event), NOT_AVAILABLE));
+		textField.setText(Optional.ofNullable(value.apply(_event)).orElse(NOT_AVAILABLE));
 		TEXT_DATA.applyTo(textField);
 	}
 }

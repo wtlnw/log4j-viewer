@@ -31,7 +31,6 @@ public class LogViewerPreferenceInitializer extends AbstractPreferenceInitialize
 		
 		store.setDefault(LogViewerPreferenceConstants.PORT, 4445);
 		store.setDefault(LogViewerPreferenceConstants.TIMEOUT, 500);
-		store.setDefault(LogViewerPreferenceConstants.REFRESH, 250);
 		store.setDefault(LogViewerPreferenceConstants.BUFFER, 1 << 12);
 		store.setDefault(LogViewerPreferenceConstants.AUTOSTART, true);
 		
