@@ -20,8 +20,6 @@ import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.util.List;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 
 import org.apache.logging.log4j.core.LogEvent;
@@ -71,13 +69,10 @@ import org.wtlnw.eclipse.log4j.viewer.core.filter.LogEventProperty;
 import org.wtlnw.eclipse.log4j.viewer.core.filter.LogEventPropertyFilter;
 import org.wtlnw.eclipse.log4j.viewer.core.impl.LogEventServer;
 import org.wtlnw.eclipse.log4j.viewer.core.impl.LogEventSupplierRegistry;
-import org.wtlnw.eclipse.log4j.viewer.core.util.LogEventBuffer;
-import org.wtlnw.eclipse.log4j.viewer.core.util.LogEventRingBuffer;
 import org.wtlnw.eclipse.log4j.viewer.ui.Activator;
 import org.wtlnw.eclipse.log4j.viewer.ui.dialogs.LogEventDetailDialog;
 import org.wtlnw.eclipse.log4j.viewer.ui.dialogs.LogEventFilterDialog;
 import org.wtlnw.eclipse.log4j.viewer.ui.preferences.LogViewerPreferenceConstants;
-import org.wtlnw.eclipse.log4j.viewer.ui.util.Util;
 
 /**
  * A {@link ViewPart} implementation displaying log4j event entries.
@@ -88,22 +83,13 @@ public class LogViewerPart extends ViewPart {
 	 * The ID of the view as specified by the extension.
 	 */
 	public static final String ID = "org.wtlnw.eclipse.log4j.viewer.ui.views.LogViewerPart";
-
-	/**
-	 * The {@link ReadWriteLock} to be used for synchronized access to internal data
-	 * structures.
-	 */
-	private final ReadWriteLock _lock = new ReentrantReadWriteLock();
 	
 	private IPreferenceStore _prefs;
 	private LogEventFilter _filter;
 	private ColorRegistry _colors; 
 	private Table _table;
 	private LogEventServer _server;
-	private LogEventBuffer _buffer;
-	private LogEventRingBuffer _rawEvents;
-	private LogEventRingBuffer _tableData;
-	private int _refreshMillis;
+	private LogViewerTableModel _model;
 
 	private Action _runAction;
 	private Action _pauseAction;
@@ -129,30 +115,17 @@ public class LogViewerPart extends ViewPart {
 		
 		// load preferences
 		_prefs = Activator.getInstance().getPreferenceStore();
-		_refreshMillis = _prefs.getInt(LogViewerPreferenceConstants.REFRESH);
 
 		// load and initialize filter
 		final LogViewerPartMementoHandler handler = new LogViewerPartMementoHandler();
 		_filter = handler.loadFilter(memento);
 		
-		final int bufferSize = _prefs.getInt(LogViewerPreferenceConstants.BUFFER);
-		_rawEvents = new LogEventRingBuffer(bufferSize);
-		_tableData = new LogEventRingBuffer(bufferSize);
-		_buffer = new LogEventBuffer(128); // use hard-coded value
-
 		final int port = _prefs.getInt(LogViewerPreferenceConstants.PORT);
 		final int timeout = _prefs.getInt(LogViewerPreferenceConstants.TIMEOUT);
 		_server = new LogEventServer(port, timeout, new LogEventSupplierRegistry().getFactories(), e -> {
-			// add event to event buffer, potentially flushing it to data buffers
-			final int changes = Util.exclusive(_lock.writeLock(), () -> {
-				final int visible = _buffer.depleted() ? flush() : 0;
-				_buffer.put(e);
-				return visible;
-			});
-
-			// update the table if event buffer was flushed due to depletion
-			if (changes > 0) {
-				site.getShell().getDisplay().asyncExec(() -> updateTable(changes, false));
+			// refresh paused, ignore the event
+			if (!_pauseAction.isChecked()) {
+				_model.put(e);
 			}
 		});
 		_server.addErrorListener((msg, ex) -> {
@@ -212,24 +185,25 @@ public class LogViewerPart extends ViewPart {
 
 		_table.addListener(SWT.SetData, e -> {
 			final TableItem item = (TableItem) e.item;
-			final Table table = item.getParent();
-			final LogEvent event = Util.exclusive(_lock.readLock(), () -> {
+
+			// Workaround for https://github.com/eclipse-platform/eclipse.platform.swt/issues/139
+			// when an event is sent for an item which is not displayed.
+			// This happens when a table is cleared while having a selection.
+			if (item.isDisposed()) {
+				return;
+			}
+			
+			final LogEvent event;
+			try {
+				event = _model.getEventAt(_table.indexOf(item));
+			} catch (final IndexOutOfBoundsException ex) {
 				// Workaround for https://github.com/eclipse-platform/eclipse.platform.swt/issues/139
 				// when an event is sent for an item which is not displayed.
 				// This happens when a table is cleared while having a selection.
-				try {
-					return eventAt(_table.indexOf(item));
-				} catch (final IndexOutOfBoundsException ex) {
-					// this shouldn't have happened
-					return null;
-				}
-			});
-
-			// ignore null-events resolved by the above workaround
-			if (event == null) {
 				return;
 			}
 
+			final Table table = item.getParent();
 			final TableColumn[] columns = table.getColumns();
 			final String[] text = new String[columns.length];
 			for (int i = 0; i < columns.length; i++) {
@@ -260,11 +234,14 @@ public class LogViewerPart extends ViewPart {
 			});
 		});
 		_table.addMouseListener(MouseListener.mouseDoubleClickAdapter(e -> {
-			final LogEvent event = getSelectedEvent();
-			if (event != null) {
-				openDetailDialog(event);
+			final int index = _table.getSelectionIndex();
+			if (index > -1) {
+				openDetailDialog(_model.getEventAt(index));
 			}
 		}));
+		
+		// initialize the model BEFORE starting the server
+		_model = new LogViewerTableModel(_table, _prefs.getInt(LogViewerPreferenceConstants.BUFFER), _filter);
 		
 		createActions();
 		fillContextMenu();
@@ -274,9 +251,6 @@ public class LogViewerPart extends ViewPart {
 		if (_prefs.getBoolean(LogViewerPreferenceConstants.AUTOSTART)) {
 			_server.start();
 		}
-
-		// start table update
-		scheduleTableUpdate();
 	}
 
 	/**
@@ -298,44 +272,6 @@ public class LogViewerPart extends ViewPart {
 		final LogEventDetailDialog dialog = new LogEventDetailDialog(_table.getShell(), event);
 		_dialogs.add(dialog);
 		dialog.open();
-	}
-
-	/**
-	 * @return the {@link LogEvent} currently selected in the table viewer or
-	 *         {@code null} if none selected
-	 */
-	private LogEvent getSelectedEvent() {
-		return Util.exclusive(_lock.readLock(), () -> {
-			final int tableIndex = _table.getSelectionIndex();
-
-			// fast-path return on empty selection
-			if (tableIndex < 0) {
-				return null;
-			} else {
-				return eventAt(tableIndex);
-			}
-		});
-	}
-
-	/**
-	 * @param tableIndex the index of the {@link TableItem} to resolve the
-	 *                   appropriate {@link LogEvent} for
-	 * @return the {@link LogEvent} to be displayed by the {@link TableItem} at the
-	 *         given index
-	 */
-	private LogEvent eventAt(final int tableIndex) {
-		final int dataIndex = invert(tableIndex);
-		return _tableData.get(dataIndex);
-	}
-
-	/**
-	 * Invert the given index for accessing event buffer and table items.
-	 * 
-	 * @param index the index to invert
-	 * @return the inverted index
-	 */
-	private int invert(final int index) {
-		return _tableData.getSize() - 1 - index;
 	}
 
 	/**
@@ -408,7 +344,7 @@ public class LogViewerPart extends ViewPart {
 				if (IDialogConstants.OK_ID == dialog.open()) {
 					_filter = dialog.getFilter();
 					setImageDescriptor(imageProvider.apply(_filter));
-					refreshTable();
+					_model.setFilter(_filter);
 				}
 			}
 		};
@@ -433,7 +369,7 @@ public class LogViewerPart extends ViewPart {
 					item.addSelectionListener(SelectionListener.widgetSelectedAdapter(e -> {
 						_filter = new LogEventFilter();
 						action.setImageDescriptor(imageProvider.apply(_filter));
-						refreshTable();
+						_model.setFilter(_filter);
 					}));
 				}
 
@@ -470,12 +406,8 @@ public class LogViewerPart extends ViewPart {
 
 				if (path != null) {
 					try (final PrintWriter out = new PrintWriter(path)) {
-						Util.exclusive(_lock.readLock(), () -> {
-							final Function<LogEvent, String> serializer = getEventSerializer();
-							for (int i = _tableData.getSize() - 1; i >= 0; i--) {
-								out.println(serializer.apply(_tableData.get(i)));
-							}
-						});
+						final Function<LogEvent, String> serializer = getEventSerializer();
+						_model.forEach(e -> out.println(serializer.apply(e)));
 					} catch (final FileNotFoundException e) {
 						ErrorDialog.openError(_table.getShell(), getText(), null, Status.error("Failed to export displayed events to specified file.", e));
 					}
@@ -495,9 +427,9 @@ public class LogViewerPart extends ViewPart {
 		final Action action = new Action("Show Selected Event Details...", PlatformUI.getWorkbench().getSharedImages().getImageDescriptor(ISharedImages.IMG_TOOL_FORWARD)) {
 			@Override
 			public void run() {
-				final LogEvent event = getSelectedEvent();
-				if (event != null) {
-					openDetailDialog(event);
+				final int index = _table.getSelectionIndex();
+				if (index > -1) {
+					openDetailDialog(_model.getEventAt(index));
 				}
 			}
 		};
@@ -507,7 +439,7 @@ public class LogViewerPart extends ViewPart {
 
 		return action;
 	}
-
+	
 	/**
 	 * @return a new {@link Action} allowing users to copy the currently selected
 	 *         {@link LogEvent} to clipboard
@@ -516,9 +448,9 @@ public class LogViewerPart extends ViewPart {
 		final Action action = new Action("Copy Selected Event", PlatformUI.getWorkbench().getSharedImages().getImageDescriptor(ISharedImages.IMG_TOOL_COPY)) {
 			@Override
 			public void run() {
-				final LogEvent event = getSelectedEvent();
-
-				if (event != null) {
+				final int index = _table.getSelectionIndex();
+				if (index > -1) {
+					final LogEvent event = _model.getEventAt(index);
 					final Clipboard board = new Clipboard(_table.getDisplay());
 					final Function<LogEvent, String> serializer = getEventSerializer();
 					
@@ -541,15 +473,7 @@ public class LogViewerPart extends ViewPart {
 		final Action action = new Action("Pause Event Table Refresh", Action.AS_CHECK_BOX) {
 			@Override
 			public void run() {
-				if (isChecked()) {
-					return;
-				}
-
-				// re-populate the table with current events
-				refreshTable();
-
-				// schedule periodic refresh
-				scheduleTableUpdate();
+				// does nothing special
 			}
 		};
 		action.setImageDescriptor(Activator.getInstance().getImageRegistry().getDescriptor(Activator.IMG_PAUSE));
@@ -564,11 +488,7 @@ public class LogViewerPart extends ViewPart {
 		final Action action = new Action("Clear Event Table") {
 			@Override
 			public void run() {
-				Util.exclusive(_lock.writeLock(), () -> {
-					_rawEvents.clear();
-					_tableData.clear();
-					_table.removeAll();
-				});
+				_model.clear();
 			}
 		};
 		action.setImageDescriptor(Activator.getInstance().getImageRegistry().getDescriptor(Activator.IMG_CLEAR));
@@ -610,136 +530,6 @@ public class LogViewerPart extends ViewPart {
 		});
 
 		return action;
-	}
-
-	/**
-	 * Clear the table and re-populate it with the current data respecting the
-	 * current filter.
-	 */
-	private void refreshTable() {
-		Util.exclusive(_lock.writeLock(), () -> {
-			// try to preserve selection
-			final int oldTableIndex = _table.getSelectionIndex();
-			final LogEvent oldEvent = oldTableIndex < 0 ? null : eventAt(oldTableIndex);
-			int newDataIndex = -1;
-
-			// clear the events displayed in the table
-			_tableData.clear();
-
-			// re-filter the raw events and populate table data
-			for (int i = 0; i < _rawEvents.getSize(); i++) {
-				final LogEvent event = _rawEvents.get(i);
-				if (_filter.test(event)) {
-					_tableData.put(event);
-
-					// the previous selection is still visible -> restore it
-					if (event == oldEvent) {
-						newDataIndex = i;
-					}
-				}
-			}
-
-			// update the table with new table data
-			_table.setItemCount(_tableData.getSize());
-			_table.clearAll();
-
-			// restore previous selection (if possible)
-			if (newDataIndex < 0) {
-				_table.deselectAll();
-			} else {
-				_table.select(invert(newDataIndex));
-			}
-		});
-	}
-
-	/**
-	 * Update the table by displaying the new event entries respecting the current
-	 * filter.
-	 * 
-	 * <p>
-	 * Note: has no effect if the given number of events is less than one.
-	 * </p>
-	 * 
-	 * @param changes the number of events to update the table with
-	 * @param repeat  {@code true} to automatically schedule the next call to this
-	 *                method after the configured amount of milliseconds or
-	 *                {@code false} to perform a one-time update only
-	 */
-	private void updateTable(final int changes, final boolean repeat) {
-		// update the table
-		if (_table != null && !_table.isDisposed()) {
-			// only update the table if there is at least one new event
-			// to display, thus avoiding unnecessary flickering.
-			if (changes > 0) {
-				// remember the current selection
-				final int oldTableIndex = _table.getSelectionIndex();
-
-				// update the table first
-				_table.setItemCount(_tableData.getSize());
-				_table.clearAll();
-
-				// try to preserve the selection (if possible)
-				if (oldTableIndex > -1) {
-					final int newTableIndex = oldTableIndex + changes;
-					if (newTableIndex < _table.getItemCount()) {
-						_table.select(newTableIndex);
-					} else {
-						_table.deselectAll();
-					}
-				}
-			}
-
-			// repeat after configured amount of time
-			if (repeat) {
-				scheduleTableUpdate();
-			}
-		}
-	}
-
-	/**
-	 * Flush the contents of the event buffer to data buffers respecting the
-	 * currently set filters.
-	 * 
-	 * @return the number of events to update the table with
-	 */
-	private int flush() {
-		// updates are paused, just clear the buffer and proceed
-		if (_pauseAction.isChecked()) {
-			_buffer.clear();
-			return 0;
-		}
-
-		// keep track of new items to be displayed
-		int added = 0;
-
-		_buffer.flip();
-		while (!_buffer.depleted()) {
-			final LogEvent event = _buffer.get();
-
-			// unconditionally store raw events
-			_rawEvents.put(event);
-
-			// update table data if refresh is not paused
-			if (_filter.test(event)) {
-				_tableData.put(event);
-				added++;
-			}
-		}
-		_buffer.clear();
-
-		return added;
-	}
-
-	/**
-	 * Schedule a deferred call to {@link #updateTable(boolean)} in order
-	 * to display new entries after the configured amount of milliseconds.
-	 */
-	private void scheduleTableUpdate() {
-		_table.getDisplay().timerExec(_refreshMillis, () -> {
-			Util.exclusive(_lock.writeLock(), () -> {
-				updateTable(flush(), true);
-			});
-		});
 	}
 
 	/**
