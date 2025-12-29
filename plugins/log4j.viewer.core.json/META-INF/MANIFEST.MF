@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: Log4j Viewer Core Json Layout Support
 Bundle-SymbolicName: log4j.viewer.core.json;singleton:=true
-Bundle-Version: 1.1.2.qualifier
+Bundle-Version: 1.1.3.qualifier
 Export-Package: org.wtlnw.eclipse.log4j.viewer.core.json.impl
 Require-Bundle: log4j.viewer.core;visibility:=reexport,
  com.fasterxml.jackson.core.jackson-annotations;bundle-version="2.19.1",
