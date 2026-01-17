@@ -67,4 +67,12 @@ public interface LogViewerPreferenceConstants {
 	 * The color to be used for displaying fatal messages in the log view.
 	 */
 	String COLOR_FATAL = "color-fatal";
+
+	/**
+	 * @param preference the preference name to check
+	 * @return {@code true} if the preference with the given name represents a color
+	 */
+	static boolean isColor(final String preference) {
+		return preference.startsWith("color-");
+	}
 }

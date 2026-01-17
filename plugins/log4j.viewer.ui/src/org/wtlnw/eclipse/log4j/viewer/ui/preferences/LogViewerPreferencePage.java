@@ -34,7 +34,7 @@ public class LogViewerPreferencePage extends FieldEditorPreferencePage implement
 	 */
 	public LogViewerPreferencePage() {
 		super(GRID);
-		setDescription("In order for the changes to take effect, the viewer has to be re-opened.");
+		setDescription("In order for the server changes to take effect, the viewer has to be re-opened.");
 	}
 
 	@Override
