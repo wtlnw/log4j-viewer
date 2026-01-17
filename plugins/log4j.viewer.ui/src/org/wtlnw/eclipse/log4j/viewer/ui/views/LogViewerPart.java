@@ -40,6 +40,8 @@ import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.preference.PreferenceConverter;
 import org.eclipse.jface.resource.ColorRegistry;
 import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.jface.resource.StringConverter;
+import org.eclipse.jface.util.IPropertyChangeListener;
 import org.eclipse.jface.viewers.ColumnWeightData;
 import org.eclipse.jface.window.Window;
 import org.eclipse.jface.window.WindowManager;
@@ -49,6 +51,7 @@ import org.eclipse.swt.dnd.TextTransfer;
 import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.events.SelectionListener;
+import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.FileDialog;
@@ -100,6 +103,29 @@ public class LogViewerPart extends ViewPart {
 	private Action _filterAction;
 
 	private WindowManager _dialogs;
+
+	private final IPropertyChangeListener _prefListener = e -> {
+		if (LogViewerPreferenceConstants.isColor(e.getProperty())) {
+			// when preferences are changed by the LogViewerPreferencePage
+			// the event seems to have RGB as value. When resetting to default
+			// the value is a String... that's a bit odd, but we can handle that.
+			final RGB newRgb = switch (e.getNewValue()) {
+				case String strRgb -> StringConverter.asRGB(strRgb);
+				case RGB rawRgb -> rawRgb;
+				default -> null;
+			};
+
+			if (newRgb != null) {
+				_colors.put(e.getProperty(), newRgb);
+
+				if (_table != null && !_table.isDisposed()) {
+					_table.clearAll();
+				}
+			}
+		} else {
+			// other properties are not applied automatically
+		}
+	};
 
 	@Override
 	public void saveState(final IMemento memento) {
@@ -155,6 +181,9 @@ public class LogViewerPart extends ViewPart {
 		_colors.put(LogViewerPreferenceConstants.COLOR_ERROR, PreferenceConverter.getColor(_prefs, LogViewerPreferenceConstants.COLOR_ERROR));
 		_colors.put(LogViewerPreferenceConstants.COLOR_FATAL, PreferenceConverter.getColor(_prefs, LogViewerPreferenceConstants.COLOR_FATAL));
 
+		// listen to changes of preferred colors and refresh the table
+		_prefs.addPropertyChangeListener(_prefListener);
+		
 		// initialize the detail dialog window manager
 		_dialogs = new WindowManager();
 
@@ -569,6 +598,9 @@ public class LogViewerPart extends ViewPart {
 
 		// close all open dialogs
 		if (_dialogs != null) _dialogs.close();
+		
+		// stop listening to preference changes
+		if (_prefs != null) _prefs.removePropertyChangeListener(_prefListener); 
 		
 		// lastly, do whatever the super-class does
 		super.dispose();
