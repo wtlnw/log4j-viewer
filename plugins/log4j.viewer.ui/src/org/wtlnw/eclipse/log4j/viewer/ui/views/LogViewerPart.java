@@ -536,7 +536,7 @@ public class LogViewerPart extends ViewPart {
 				if (isChecked()) {
 					_server.start();
 				} else {
-					_server.stop();
+					_server.stop(true);
 				}
 			}
 		};
@@ -594,7 +594,7 @@ public class LogViewerPart extends ViewPart {
 	@Override
 	public void dispose() {
 		// stop the server and pause event updates
-		if (_server.isRunning()) _server.stop(); 
+		if (_server.isRunning()) _server.stop(true); 
 
 		// close all open dialogs
 		if (_dialogs != null) _dialogs.close();
