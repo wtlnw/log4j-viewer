@@ -151,7 +151,7 @@ public class TestJsonLogEventSupplierFactory {
 		}
 
 		sema.acquire();
-		server.stop();
+		server.stop(true);
 		
 		if (!errors.isEmpty()) {
 			Assertions.fail(errors.getFirst());
