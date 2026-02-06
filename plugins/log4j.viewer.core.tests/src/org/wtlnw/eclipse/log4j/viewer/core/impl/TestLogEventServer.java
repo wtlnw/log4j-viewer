@@ -18,9 +18,12 @@ import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.BindException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import org.apache.logging.log4j.core.LogEvent;
@@ -111,9 +114,48 @@ public class TestLogEventServer {
 		}
 
 		sema.acquire();
-		server.stop();
+		server.stop(true);
 
 		Assertions.assertEquals(0, events.size());
+	}
+
+	@Test
+	void testMultipleServers() throws IOException, InterruptedException {
+		// start two servers (one would start and one would not) and then try to stop the second one
+		final Semaphore startTwo = new Semaphore(0);
+		final Semaphore stopBoth = new Semaphore(0);
+		final List<LogEvent> events = Collections.synchronizedList(new ArrayList<>());
+		final List<LogEventSupplierFactory> factories = List.of();
+		final LogEventServer serverOne = new LogEventServer(factories, events::add);
+		serverOne.addServerListener(started -> {
+			if (started) {
+				startTwo.release();
+			}
+		});
+		final LogEventServer serverTwo = new LogEventServer(factories, events::add);
+		serverTwo.addErrorListener((msg, ex) -> {
+			if (ex instanceof BindException) {
+				stopBoth.release();
+			}
+		});
+
+		// this one should succeed
+		serverOne.start();
+		startTwo.tryAcquire(serverOne.getTimeout() * 3, TimeUnit.MILLISECONDS);
+
+		Assertions.assertTrue(serverOne.isRunning());
+
+		// this one should fail
+		serverTwo.start();
+		stopBoth.tryAcquire(serverTwo.getTimeout() * 3, TimeUnit.MILLISECONDS);
+
+		Assertions.assertFalse(serverTwo.isRunning());
+
+		// both should terminate in a finite amount of time
+		Assertions.assertDoesNotThrow(() -> serverOne.stop(true));
+		Assertions.assertFalse(serverOne.isRunning());
+		
+		Assertions.assertThrows(IllegalStateException.class, () -> serverTwo.stop(true));
 	}
 	
 	@SuppressWarnings("deprecation")
@@ -154,7 +196,7 @@ public class TestLogEventServer {
 		}
 
 		sema.acquire();
-		server.stop();
+		server.stop(true);
 		
 		if (!errors.isEmpty()) {
 			Assertions.fail(errors.getFirst());
@@ -166,7 +208,7 @@ public class TestLogEventServer {
 		
 		Assertions.assertNotNull(events.get(2).getThrownProxy());
 	}
-	
+
 	private Configuration config(final String config) throws IOException {
 		try (final InputStream input = new ByteArrayInputStream(config.getBytes())) {
 			return ConfigurationFactory.getInstance().getConfiguration(null, new ConfigurationSource(input));
